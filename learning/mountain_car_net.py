@@ -103,7 +103,7 @@ class Shallow_Q_Learner(object):
         # 选择是随机值还是学习到的动作
         if np.random.random() > self.epsilon:
             # 根据观察值从Q值中获取最大的Q值的动作
-            return np.argmax(self.Q(discrete_obs).data.to(self.device).numpy())
+            return np.argmax(self.Q(discrete_obs).data.to("cpu").numpy())
         else:
             return np.random.choice([a for a in range(self.action_shape)])
 
