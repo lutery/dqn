@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 from gym import spaces, Wrapper
 import numpy as np
 import random
