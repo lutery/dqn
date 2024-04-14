@@ -87,7 +87,7 @@ class Shallow_Q_Learner(object):
         :return:
         '''
 
-        return tuple(((obs - self.obs_low) / self.obs_width).astype(int))
+        return ((obs - self.obs_low) / self.obs_width).astype(int)
 
     def get_action(self, obs):
         '''
