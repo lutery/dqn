@@ -1,3 +1,6 @@
+'''
+书中到3万多步奖励才上升
+'''
 import gym
 from gym import spaces, Wrapper
 import numpy as np
