@@ -1,5 +1,6 @@
 '''
 书中到3万多步奖励才上升
+没问题，有bug
 '''
 import gym
 from gym import spaces, Wrapper
@@ -143,6 +144,13 @@ if __name__ == "__main__":
     agent = Q_Learner(env)
     policy = train(agent, env)
     gym_monitor_path = "./gym_monitor_output"
+    '''
+    todo
+    Traceback (most recent call last):
+  File "M:\Projects\python\my_-nqd\learning\mountain_car.py", line 146, in <module>
+    env = gym.wrappers.Monitor(env, gym_monitor_path, force=True)
+AttributeError: module 'gym.wrappers' has no attribute 'Monitor'
+    '''
     env = gym.wrappers.Monitor(env, gym_monitor_path, force=True)
     for _ in range(1000):
         test(agent, env, policy)
