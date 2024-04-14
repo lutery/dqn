@@ -1,3 +1,6 @@
+'''
+todo 疑似有问题，4万轮游戏都没有稳定的结果
+'''
 import gymnasium as gym
 from gym import spaces, Wrapper
 import numpy as np
