@@ -9,8 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-# 创建游戏环境
-env = gym.make("MountainCar-v0", render_mode="human")
+
 # 测试多少次游戏轮数
 MAX_NUM_EPISODES = 50000
 # 每轮游戏的最大步数
