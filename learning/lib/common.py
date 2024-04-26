@@ -54,7 +54,7 @@ def calc_loss_dqn(batch, net, tgt_net, gamma, device="cpu"):
     # tag_net负责计算下一个状态的Q值
     # 并将其中会导致游戏结束的动作的Q值设置为0，这样可以将不好的q值降低
     next_state_values = tgt_net(next_states_v).max(1)[0]
-    next_state_values[done_mask] = 0.0
+    next_state_values[done_mask.bool()] = 0.0
 
     # 损失值计算：下一个状态的最大Q值+实际获取到的激励值 == 当前net计算出来的Q值
     expected_state_action_values = next_state_values.detach() * gamma + rewards_v

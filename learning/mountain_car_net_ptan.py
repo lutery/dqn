@@ -51,7 +51,6 @@ if __name__ == "__main__":
 
     # 创建游戏环境
     env = gym.make("MountainCar-v0")
-    env = ptan.common.wrappers.wrap_dqn(env)
     env = CustomEndConditionWrapper(env)
 
     writer = SummaryWriter(comment="-mountain-car-ptan-n-steps")

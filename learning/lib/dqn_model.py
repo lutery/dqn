@@ -11,32 +11,11 @@ class DQNMountainCar(nn.Module):
 
         super(DQNMountainCar, self).__init__()
 
-        self.conv = nn.Sequential(
-            nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
+        self.seq = nn.Sequential(
+            nn.Linear(input_shape[0], 40),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.ReLU()
+            nn.Linear(40, n_actions)
         )
-
-        conv_out_size = self._get_conv_out(input_shape)
-        self.fc = nn.Sequential(
-            nn.Linear(conv_out_size, 512),
-            nn.ReLU(),
-            nn.Linear(512, n_actions)
-        )
-
-    def _get_conv_out(self, shape):
-        '''
-        获取卷积删除的所有维度大小，便于给之后的全连接层
-        '''
-
-        o = self.conv(torch.zeros(1, *shape))
-        # np.prod 计算所有维度的乘积
-        return int(np.prod(o.size()))
 
     def forward(self, x):
-        fx = x.float() / 256
-        conv_out = self.conv(fx).view(fx.size()[0], -1)
-        return self.fc(conv_out)
+        return self.seq(x)
