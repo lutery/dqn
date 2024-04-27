@@ -2,8 +2,8 @@
 书中到3万多步奖励才上升
 没问题，有bug
 '''
-import gym
-from gym import spaces, Wrapper
+import gymnasium as gym
+from gymnasium import spaces, Wrapper
 import numpy as np
 
 # 创建游戏环境
@@ -138,7 +138,7 @@ def test(agent, env, policy):
 
 if __name__ == "__main__":
     # 创建游戏环境
-    env = gym.make("MountainCar-v0", render_mode="human")
+    env = gym.make("MountainCar-v0")
     env = CustomEndConditionWrapper(env)
     # 创建Q学习器
     agent = Q_Learner(env)
