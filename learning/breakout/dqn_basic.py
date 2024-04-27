@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os.path
+
 import gymnasium as gym
 import ptan
 import argparse
@@ -81,3 +83,7 @@ if __name__ == "__main__":
 
             if frame_idx % 1000 == 0:
                 tgt_net.sync()
+            if frame_idx % 10000 == 0:
+                if not os.path.exists("./model_data"):
+                    os.mkdir("./model_data")
+                torch.save(net.state_dict(), "./model_data/breakout_small_basic_%08d.dat" % frame_idx)
