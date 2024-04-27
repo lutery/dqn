@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-import os.path
-
+'''
+使用基础的dqn网络可是的分数上升，但是上升的过于缓慢
+'''
+import os
 import gymnasium as gym
 import ptan
 import argparse
