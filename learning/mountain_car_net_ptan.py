@@ -66,7 +66,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(net.parameters(), lr=1e-4)
     frame_idx = 0
 
-    with common.RewardTracker(writer, stop_reward=-110) as reward_tracker:
+    with common.RewardTracker(writer, stop_reward=-150) as reward_tracker:
         while True:
             frame_idx += 1
             buffer.populate(1)
