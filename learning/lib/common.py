@@ -74,7 +74,7 @@ class EpsilonTracker:
         self.epsilon_greedy_selector = epsilon_greedy_selector
         self.epsilon_start = epsilon_start
         self.epsilon_final = epsilon_final
-        self.epsilon_frames = epsilon_final
+        self.epsilon_frames = epsilon_frames
         self.frame(0)
 
     def frame(self, frame):
