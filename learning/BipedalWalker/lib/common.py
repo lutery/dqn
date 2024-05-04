@@ -4,6 +4,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import ptan
 
 HID_SIZE = 128
 
@@ -18,21 +19,21 @@ class BipedalWalkerModelA2C(nn.Module):
 
         # 只有这个是提取特征，其余的都是输出结果
         self.base = nn.Sequential(
-            nn.Linear(obs_size, HID_SIZE),
+            nn.Linear(obs_size[0], HID_SIZE),
             nn.ReLU(),
         )
         # 输出均值，表示最终要执行的动作内容
         # 这里由于预测的输出动作包含负值，所以采用tanh函数，将输出值限制在-1到1之间
         # 而不是用sigmoid
         self.mu = nn.Sequential(
-            nn.Linear(HID_SIZE, act_size),
+            nn.Linear(HID_SIZE, act_size[0]),
             nn.Tanh(),
         )
         # https: // zhuanlan.zhihu.com / p / 461707201
         # var作用 方差平方，怀疑是用来稳定输出的概率范围大小
         # 用来促进网络进行探索以及指导网路朝哪个方向进行训练，使得整体趋近中值，但是在这里并没有直接使用方差，而是使用了信息熵的方式
         self.var = nn.Sequential(
-            nn.Linear(HID_SIZE, act_size),
+            nn.Linear(HID_SIZE, act_size[0]),
             nn.Softplus(), # Relu的替代函数，用于解决梯度消失问题 具体使用场景查看笔记内容
         )
         # 状态值（Q值），用来评价当前Q值，来评估当前执行的动作是否有优势

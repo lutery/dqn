@@ -12,6 +12,7 @@ import torch.optim as optim
 import torch.multiprocessing as mp
 import math
 from lib import common
+from lib import model
 
 GAMMA = 0.99
 LEARNING_RATE = 0.001
@@ -37,7 +38,7 @@ REWARD_BOUND = 18
 def make_env():
     # # 创建环境，将不同环境统一成统一操作
     # 比如有些游戏只有一条命，有些游戏有多条命
-    return ptan.common.wrappers.wrap_dqn(gym.make(ENV_NAME))
+    return gym.make(ENV_NAME)
 
 def calc_logprob(mu_v, var_v, actions_v):
     p1 = - ((mu_v - actions_v) ** 2) / (2*var_v.clamp(min=1e-3))
@@ -52,7 +53,7 @@ def grads_func(proc_name, net, device, train_queue):
     # 每个子进程创建NUM_ENVS个环境
     envs = [make_env() for _ in range(NUM_ENVS)]
     # 创建策略代理
-    agent = ptan.agent.PolicyAgent(lambda x: net(x)[0], device=device, apply_softmax=True)
+    agent = model.AgentA2C(net, device=device)
     # 创建经验源，经验源本身支持多环境
     exp_source = ptan.experience.ExperienceSourceFirstLast(envs, agent, gamma=GAMMA, steps_count=REWARD_STEPS)
 
@@ -142,7 +143,7 @@ if __name__ == "__main__":
     device = "cuda" if args.cuda else "cpu"
 
     env = make_env()
-    net = common.BipedalWalkerModelA2C(env.observation_space.shape, env.action_space.n).to(device)
+    net = common.BipedalWalkerModelA2C(env.observation_space.shape, env.action_space.shape).to(device)
     # 生命网络net为共享内存，share_memory必须在调用fork前调用
     # 这样net就可以很方便的在每个进程间使用了
     # 使用share_memory会共享网络权重，而不会共享计算图、梯度
