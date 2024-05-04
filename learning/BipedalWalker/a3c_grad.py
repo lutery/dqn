@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 未验证是否可行
+# 验证可以运行，但是貌似没办法达到训练目标
 import gymnasium as gym
 import ptan
 import argparse
