@@ -1,4 +1,7 @@
 已经到达极限奖励处，奖励可以接近300
+看训练记录，发现后面测试奖励300左右的时候，评估网络会发生误差变大的情况，经过UI渲染查看后，发现是由于BipedalWalker游戏最长只能达到300奖励，当到达300奖励后，游戏
+前方会出现深坑，强制游戏结束，所以这就导致评估网络在这个时候无法正确评估出Q值，因为ddpg总是让网络朝着走更多步方向前进，而实际游戏又无法继续前进，所以导致评估网络误差变大
+所以训练的时候要按照实际游戏奖励的大小来存储，否则存储了这个时候的奖励的模型数据，可能会导致拿不到最好的训练模型
 
 C:\Users\admin\.conda\envs\pytorch-gym\python.exe K:\Projects\python\DQN\learning\BipedalWalker\train_ddpg.py -n bipedalwalker_ddpg 
 DDPGActor(
