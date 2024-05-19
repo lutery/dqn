@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # 验证可以运行，但是貌似没办法达到训练目标
+# todo 发现应该是该方法原先对应的是离散值导致无法收敛，需要修改为连续值
 import gymnasium as gym
 import ptan
 import argparse
