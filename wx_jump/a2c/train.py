@@ -215,7 +215,6 @@ def train(game_net, eval_net, game, writer, optimizer, eval_optimizer, scheduler
                 "scheduler": scheduler.state_dict(),
                 "eval_scheduler": eval_scheduler.state_dict()
             }
-            game_net.save_state(checkpoint)
             save_checkpoints(single_t, checkpoint, CHECK_POINT_PATH, keep_last=10)
 
         if single_t % 150 == 0:
