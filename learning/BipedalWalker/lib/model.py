@@ -331,3 +331,74 @@ class AgentD4PG(ptan.agent.BaseAgent):
         # 防止动作值超过边界
         actions = np.clip(actions, -1, 1)
         return actions, agent_states
+
+class ModelActor(nn.Module):
+    def __init__(self, obs_size, act_size):
+        '''
+        :param obs_size: 观测的环境维度
+        :param act_size: 执行的动作的维度
+        '''
+        super(ModelActor, self).__init__()
+
+        self.mu = nn.Sequential(
+            nn.Linear(obs_size, HID_SIZE),
+            nn.Tanh(),
+            nn.Linear(HID_SIZE, HID_SIZE),
+            nn.Tanh(),
+            nn.Linear(HID_SIZE, act_size),
+            nn.Tanh(),
+        )
+        # 作用 看名称像是方差：是用来控制动作的探索程度的
+        # 怎么更新？：在训练的过程中，会不断的更新这个参数，更新的逻辑就在于计算熵损失以及计算动作优势大小的时候会参与计算，然后在梯度更新的时候，会自动更新这个参数到合适的大小
+        self.logstd = nn.Parameter(torch.zeros(act_size))
+
+    def forward(self, x):
+        return self.mu(x)
+
+
+class ModelCritic(nn.Module):
+    '''
+    trop信赖域策略优化评价网络
+    ACKTR算法中使用的critic网络
+    ppt优化评价网络
+    '''
+    def __init__(self, obs_size):
+        super(ModelCritic, self).__init__()
+
+        self.value = nn.Sequential(
+            nn.Linear(obs_size, HID_SIZE),
+            nn.ReLU(),
+            nn.Linear(HID_SIZE, HID_SIZE),
+            nn.ReLU(),
+            nn.Linear(HID_SIZE, 1),
+        )
+
+    def forward(self, x):
+        return self.value(x)
+
+
+class AgentTRPO(ptan.agent.BaseAgent):
+    '''
+    创建代理器
+    '''
+    def __init__(self, net, device="cpu"):
+        self.net = net
+        self.device = device
+
+    def __call__(self, states, agent_states):
+        '''
+        states: 观测的环境状态
+        agent_states：智能体自己的状态，在这里是没有使用的
+        '''
+        # 创建环境预处理器，将环境状态转换为float32类型
+        states_v = ptan.agent.float32_preprocessor(states).to(self.device)
+
+        # 通过环境状态预测执行的动作
+        mu_v = self.net(states_v)
+        mu = mu_v.data.cpu().numpy()
+        logstd = self.net.logstd.data.cpu().numpy()
+        # 该动作的作用，是对预测的动作添加随机噪音，实现动作的探索
+        actions = mu + np.exp(logstd) * np.random.normal(size=logstd.shape)
+        # 将执行的动作压缩到-1到1中，可能是因为输入给网络的值不能超过-1和1
+        actions = np.clip(actions, -1, 1)
+        return actions, agent_states
