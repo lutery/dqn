@@ -1,3 +1,6 @@
+tpro的方法训练出来的效果无论是速度上和效果上都比ddpg要好很多
+但最终的奖励和ddpg差不多
+
 C:\Users\admin\.conda\envs\pytorch-gym\python.exe K:\Projects\python\DQN\learning\BipedalWalker\train_trpo.py -n bipedalwalker_trpo 
 ModelActor(
   (mu): Sequential(
