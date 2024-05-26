@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 '''
 实现基于trpo的训练方法
-todo 验证算法是否有效
+验证算法通过，算法有效，且比DDPG要更快达到最好的奖励
 '''
 import os
 import math
