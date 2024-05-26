@@ -179,39 +179,19 @@ if __name__ == "__main__":
 
             # actor step
             def get_loss():
-                '''
-                获取损失
-                获取执行动作获取优势的损失
-                '''
-                # 根据状态预测动作
                 mu_v = net_act(traj_states_v)
-                # 计算预测动作的概率
                 logprob_v = calc_logprob(mu_v, net_act.logstd, traj_actions_v)
-                # 这里使用的公式和公式P317一样，也是为了更加稳定采用了对比的方式
-                # 通过对比的方式，可以知道调整的方向和原有的预测是相同方向还是相反
-                # 方向
-                # 为了能够达到最大的优化效果（在这里加了负号，所以是最小值），那么如果traj_adv_v是正的，那么torch.exe需要增加，那么logprob_v - old_logprob_v中，logprob_v就是往大于old_logprob_v方向的调整；反之则往反方向调整。使用这种方式作为损失函数的好处就是，能够明确知道往哪个方向调整梯度，而不是像之前的策略梯度，只能通过梯度的方向来调整，但是梯度的方向不一定是最优的方向，所以会导致训练不稳定
                 action_loss_v = -traj_adv_v.unsqueeze(dim=-1) * torch.exp(logprob_v - old_logprob_v)
                 return action_loss_v.mean()
 
             def get_kl():
-                '''
-                在TRPO（Trust Region Policy Optimization）算法中，这个 get_kl 函数用于计算KL散度（Kullback–Leibler divergence），也称为相对熵，这是一个衡量两个概率分布差异的度量。在TRPO算法中，KL散度用于保证策略更新步骤不会偏离原来策略太远，从而确保学习的稳定性。以下是对这个函数中每一行代码的解释：
-                '''
-                # 根据状态预测动作
                 mu_v = net_act(traj_states_v)
-                # 获取策略网络预测的动作的对数标准差。
                 logstd_v = net_act.logstd
-                # 分别对 mu_v 和 logstd_v 进行分离操作，使得它们的梯度不会传回网络。这些变量表示前一个策略的参数。
-                # todo 为什么这种操作会使得梯度不会传回网络，导致logstd0_v != logstd_v
                 mu0_v = mu_v.detach()
                 logstd0_v = logstd_v.detach()
-                # 将对数标准差转换为标准差（通过指数运算）。std0_v 是前一个策略的标准差。
                 std_v = torch.exp(logstd_v)
                 std0_v = std_v.detach()
-                # 计算当前策略和前一个策略之间的KL散度。这个公式是基于两个多元高斯分布之间的KL散度公式。
                 kl = logstd_v - logstd0_v + (std0_v ** 2 + (mu0_v - mu_v) ** 2) / (2.0 * std_v ** 2) - 0.5
-                # 将KL散度在动作维度上求和，得到每个状态对应的KL散度，并保持维度不变（即使每个状态只有一个KL散度值）。
                 return kl.sum(1, keepdim=True)
 
             trpo.trpo_step(net_act, get_loss, get_kl, TRPO_MAX_KL, TRPO_DAMPING, device=device)
