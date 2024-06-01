@@ -202,6 +202,61 @@ class AgentA2C(ptan.agent.BaseAgent):
         return actions, agent_states
 
 
+class AgentAcktr(ptan.agent.BaseAgent):
+    '''
+    创建代理器
+    '''
+    def __init__(self, net, device="cpu"):
+        self.net = net
+        self.device = device
+
+    def __call__(self, states, agent_states):
+        '''
+        states: 观测的环境状态
+        agent_states：智能体自己的状态，在这里是没有使用的
+        '''
+        # 创建环境预处理器，将环境状态转换为float32类型
+        states_v = ptan.agent.float32_preprocessor(states).to(self.device)
+
+        # 通过环境状态预测执行的动作
+        mu_v = self.net(states_v)
+        mu = mu_v.data.cpu().numpy()
+        logstd = self.net.logstd.data.cpu().numpy()
+        # 该动作的作用，是对预测的动作添加随机噪音，实现动作的探索
+        actions = mu + np.exp(logstd) * np.random.normal(size=logstd.shape)
+        # 将执行的动作压缩到-1到1中，可能是因为输入给网络的值不能超过-1和1
+        actions = np.clip(actions, -1, 1)
+        return actions, agent_states
+
+
+
+class AgentPPO(ptan.agent.BaseAgent):
+    '''
+    创建代理器
+    '''
+    def __init__(self, net, device="cpu"):
+        self.net = net
+        self.device = device
+
+    def __call__(self, states, agent_states):
+        '''
+        states: 观测的环境状态
+        agent_states：智能体自己的状态，在这里是没有使用的
+        '''
+        # 创建环境预处理器，将环境状态转换为float32类型
+        states_v = ptan.agent.float32_preprocessor(states).to(self.device)
+
+        # 通过环境状态预测执行的动作
+        mu_v = self.net(states_v)
+        mu = mu_v.data.cpu().numpy()
+        logstd = self.net.logstd.data.cpu().numpy()
+        # 该动作的作用，是对预测的动作添加随机噪音，实现动作的探索
+        actions = mu + np.exp(logstd) * np.random.normal(size=logstd.shape)
+        # 将执行的动作压缩到-1到1中，可能是因为输入给网络的值不能超过-1和1
+        actions = np.clip(actions, -1, 1)
+        return actions, agent_states
+
+
 class AgentDDPG(ptan.agent.BaseAgent):
     """
     Agent implementing Orstein-Uhlenbeck exploration process
