@@ -18,7 +18,7 @@ GAME = 'wx_jump'
 ACTIONS = 100
 OBS_SHAPE = 17
 GAMMA = 0.99
-MINI_BATCH = 10
+MINI_BATCH = 128
 BATCH = MINI_BATCH * 250
 TRAIN_EPOCH = 32
 TRAIN_BATCH = MINI_BATCH
@@ -32,7 +32,7 @@ single_t = 1
 STATUS_SHAPE = (14)
 SAVE_MODEL_NAME = "wx_game_net.pth"
 CHECK_POINT_PATH = "./checkpoints"
-SAVE_MODEL_PATH = ".//save"
+SAVE_MODEL_PATH = "./save"
 
 def float32_preprocessor(states):
     '''
