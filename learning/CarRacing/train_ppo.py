@@ -28,7 +28,7 @@ LEARNING_RATE_CRITIC = 1e-2
 
 PPO_EPS = 0.2
 PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
-PPO_BATCH_SIZE = 2 # 每次进行轨迹样本计算的batch长度
+PPO_BATCH_SIZE = 64 # 每次进行轨迹样本计算的batch长度
 
 TEST_ITERS = 100000 # 采样迭代多少次，进行一次游戏测试
 
@@ -132,15 +132,17 @@ def process_in_batches(data, model, batch_size):
     results = []  # 存储每个批次的输出结果
 
     # 遍历并处理每个批次
-    for i in range(0, total_size, batch_size):
-        # 获取当前批次的数据
-        batch = data[i:min(i + batch_size, total_size)]
-        
-        # 传入模型进行预测
-        batch_output = model(batch)
-        
-        # 收集输出结果
-        results.append(batch_output)
+    with torch.no_grad():  # 关闭梯度计算
+        for i in range(0, total_size, batch_size):
+            print("Processing batch {}/{}".format(i // batch_size + 1, total_size // batch_size))
+            # 获取当前批次的数据
+            batch = data[i:min(i + batch_size, total_size)]
+            
+            # 传入模型进行预测
+            batch_output = model(batch)
+            
+            # 收集输出结果
+            results.append(batch_output)
 
     # 将所有批次结果合并成一个 Tensor
     combined_results = torch.cat(results, dim=0)
@@ -150,7 +152,7 @@ def process_in_batches(data, model, batch_size):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cuda", default=True, action='store_true', help='Enable CUDA')
-    parser.add_argument("-n", "--name", default="ppo_carracing", required=True, help="Name of the run")
+    parser.add_argument("-n", "--name", default="ppo_carracing", required=False, help="Name of the run")
     parser.add_argument("-e", "--env", default=ENV_ID, help="Environment id, default=" + ENV_ID)
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
