@@ -167,6 +167,12 @@ if __name__ == "__main__":
     net_act = model.ModelActor(env.observation_space.shape, env.action_space.shape[0]).to(device)
     # 创建状态、动作评价网络
     net_crt = model.ModelCritic(env.observation_space.shape).to(device)
+    if (os.path.exists(os.path.join(save_path, "act.pth"))):
+        net_act.load_state_dict(torch.load(os.path.join(save_path, "act.pth")))
+
+    if (os.path.exists(os.path.join(save_path, "crt.pth"))):
+        net_crt.load_state_dict(torch.load(os.path.join(save_path, "crt.pth")))
+
     print(net_act)
     print(net_crt)
 
