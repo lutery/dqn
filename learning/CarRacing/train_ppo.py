@@ -22,7 +22,7 @@ ENV_ID = "CarRacing-v2"
 GAMMA = 0.99
 GAE_LAMBDA = 0.95 # 优势估计器的lambda因子，0.95是一个比较好的值
 
-TRAJECTORY_SIZE = 2049 # todo 作用 看代码好像是采样的轨迹长度（轨迹，也就是连续采样缓存长度，游戏是连续的）
+TRAJECTORY_SIZE = 1025 # todo 作用 看代码好像是采样的轨迹长度（轨迹，也就是连续采样缓存长度，游戏是连续的）
 LEARNING_RATE_ACTOR = 1e-3
 LEARNING_RATE_CRITIC = 1e-2
 
@@ -77,7 +77,8 @@ def calc_adv_ref(trajectory, net_crt, states_v, device="cpu"):
     :param states_v: states tensor 状态张量
     :return: tuple with advantage numpy array and reference values
     """
-    values_v = net_crt(states_v) # 得到预测的Q值
+    # values_v = net_crt(states_v) # 得到预测的Q值
+    values_v = process_in_batches(states_v, net_crt, PPO_BATCH_SIZE)
     values = values_v.squeeze().data.cpu().numpy()
     # generalized advantage estimator: smoothed version of the advantage
     # 广义优势估计量:优势的平滑版
@@ -115,15 +116,48 @@ def calc_adv_ref(trajectory, net_crt, states_v, device="cpu"):
     return adv_v, ref_v
 
 
+def process_in_batches(data, model, batch_size):
+    """
+    分批处理数据并通过模型计算结果。
+
+    参数:
+    - data: 要处理的数据，应为 torch.Tensor 类型。
+    - model: 用于处理数据的神经网络模型。
+    - batch_size: 每个批次的数据大小。
+
+    返回:
+    - 处理后的数据，所有批次的结果合并后的 torch.Tensor。
+    """
+    total_size = data.size(0)
+    results = []  # 存储每个批次的输出结果
+
+    # 遍历并处理每个批次
+    with torch.no_grad():  # 关闭梯度计算
+        for i in range(0, total_size, batch_size):
+            print("Processing batch {}/{}".format(i // batch_size + 1, total_size // batch_size))
+            # 获取当前批次的数据
+            batch = data[i:min(i + batch_size, total_size)]
+            
+            # 传入模型进行预测
+            batch_output = model(batch)
+            
+            # 收集输出结果
+            results.append(batch_output)
+
+    # 将所有批次结果合并成一个 Tensor
+    combined_results = torch.cat(results, dim=0)
+    return combined_results
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cuda", default=True, action='store_true', help='Enable CUDA')
-    parser.add_argument("-n", "--name", required=True, help="Name of the run")
+    parser.add_argument("-n", "--name", default="ppo_carracing", required=False, help="Name of the run")
     parser.add_argument("-e", "--env", default=ENV_ID, help="Environment id, default=" + ENV_ID)
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join("saves", "ppo-" + args.name)
+    save_path = os.path.join(r"M:\Projects\python\my_-nqd\learning\CarRacing\saves", "ppo-" + args.name)
     os.makedirs(save_path, exist_ok=True)
 
     env = TransposeObservation(gym.make(args.env, domain_randomize=True, continuous=True))
@@ -133,6 +167,12 @@ if __name__ == "__main__":
     net_act = model.ModelActor(env.observation_space.shape, env.action_space.shape[0]).to(device)
     # 创建状态、动作评价网络
     net_crt = model.ModelCritic(env.observation_space.shape).to(device)
+    if (os.path.exists(os.path.join(save_path, "act.pth"))):
+        net_act.load_state_dict(torch.load(os.path.join(save_path, "act.pth")))
+
+    if (os.path.exists(os.path.join(save_path, "crt.pth"))):
+        net_crt.load_state_dict(torch.load(os.path.join(save_path, "crt.pth")))
+
     print(net_act)
     print(net_crt)
 
@@ -180,7 +220,8 @@ if __name__ == "__main__":
             # 计算优势值和实际Q值
             traj_adv_v, traj_ref_v = calc_adv_ref(trajectory, net_crt, traj_states_v, device=device)
             # 根据状态预测动作
-            mu_v = net_act(traj_states_v)
+            # mu_v = net_act(traj_states_v)
+            mu_v = process_in_batches(traj_states_v, net_act, PPO_BATCH_SIZE)
             # 计算上一轮训练的评价网络、动作网络动作的概率
             old_logprob_v = calc_logprob(mu_v, net_act.logstd, traj_actions_v)
 
