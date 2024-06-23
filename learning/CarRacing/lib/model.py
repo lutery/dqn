@@ -424,56 +424,20 @@ class ModelActor(nn.Module):
     def __init__(self, obs_size, act_size):
         super().__init__()
 
-        self.pre = nn.Sequential(
-            nn.Conv2d(obs_size[2], 32, 1, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU6(inplace=True)
-        )
-
-        self.stage1 = LinearBottleNeck(32, 16, 1, 1)
-        self.stage2 = self._make_stage(2, 16, 24, 2, 6)
-        self.stage3 = self._make_stage(3, 24, 32, 2, 6)
-        self.stage4 = self._make_stage(4, 32, 64, 2, 6)
-        self.stage5 = self._make_stage(3, 64, 96, 1, 6)
-        self.stage6 = self._make_stage(3, 96, 160, 1, 6)
-        self.stage7 = LinearBottleNeck(160, 320, 1, 6)
-
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(320, 1280, 1),
-            nn.BatchNorm2d(1280),
-            nn.ReLU6(inplace=True)
-        )
-
-        self.conv2 = nn.Conv2d(1280, act_size, 1)
-
+        self.conv1 = nn.Conv2d(obs_size[2], 128, kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(128, 256, kernel_size=2, stride=2)
+        self.conv3 = nn.Conv2d(256, 512, kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(73728, act_size)
+        self.relu = nn.ReLU(inplace=True)
         self.logstd = nn.Parameter(torch.zeros(act_size))
+    
 
     def forward(self, x):
-        x = self.pre(x)
-        x = self.stage1(x)
-        x = self.stage2(x)
-        x = self.stage3(x)
-        x = self.stage4(x)
-        x = self.stage5(x)
-        x = self.stage6(x)
-        x = self.stage7(x)
-        x = self.conv1(x)
-        x = F.adaptive_avg_pool2d(x, 1)
-        x = self.conv2(x)
-        x = x.view(x.size(0), -1)
-
+        x = self.relu(self.conv1(x))
+        x = self.relu(self.conv2(x))
+        x = self.relu(self.conv3(x))
+        x = self.fc1(x.view(x.shape[0], -1))
         return x
-
-    def _make_stage(self, repeat, in_channels, out_channels, stride, t):
-
-        layers = []
-        layers.append(LinearBottleNeck(in_channels, out_channels, stride, t))
-
-        while repeat - 1:
-            layers.append(LinearBottleNeck(out_channels, out_channels, 1, t))
-            repeat -= 1
-
-        return nn.Sequential(*layers)
 
 
 class ModelCritic(nn.Module):
@@ -481,51 +445,60 @@ class ModelCritic(nn.Module):
     def __init__(self, obs_size):
         super().__init__()
 
-        self.pre = nn.Sequential(
-            nn.Conv2d(obs_size[2], 32, 1, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU6(inplace=True)
-        )
-
-        self.stage1 = LinearBottleNeck(32, 16, 1, 1)
-        self.stage2 = self._make_stage(2, 16, 24, 2, 6)
-        self.stage3 = self._make_stage(3, 24, 32, 2, 6)
-        self.stage4 = self._make_stage(4, 32, 64, 2, 6)
-        self.stage5 = self._make_stage(3, 64, 96, 1, 6)
-        self.stage6 = self._make_stage(3, 96, 160, 1, 6)
-        self.stage7 = LinearBottleNeck(160, 320, 1, 6)
-
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(320, 1280, 1),
-            nn.BatchNorm2d(1280),
-            nn.ReLU6(inplace=True)
-        )
-
-        self.conv2 = nn.Conv2d(1280, 1, 1)
+        self.conv1 = nn.Conv2d(obs_size[2], 128, kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(128, 256, kernel_size=2, stride=2)
+        self.conv3 = nn.Conv2d(256, 512, kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(73728, 1)
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        x = self.pre(x)
-        x = self.stage1(x)
-        x = self.stage2(x)
-        x = self.stage3(x)
-        x = self.stage4(x)
-        x = self.stage5(x)
-        x = self.stage6(x)
-        x = self.stage7(x)
-        x = self.conv1(x)
-        x = F.adaptive_avg_pool2d(x, 1)
-        x = self.conv2(x)
-        x = x.view(x.size(0), -1)
-
+        x = self.relu(self.conv1(x))
+        x = self.relu(self.conv2(x))
+        x = self.relu(self.conv3(x))
+        x = self.fc1(x.view(x.shape[0], -1))
         return x
+    
 
-    def _make_stage(self, repeat, in_channels, out_channels, stride, t):
+class ModelActorLinear(nn.Module):
+    def __init__(self, obs_size, act_size):
+        '''
+        :param obs_size: 观测的环境维度
+        :param act_size: 执行的动作的维度
+        '''
+        super(ModelActorLinear, self).__init__()
 
-        layers = []
-        layers.append(LinearBottleNeck(in_channels, out_channels, stride, t))
+        self.mu = nn.Sequential(
+            nn.Linear(obs_size, HID_SIZE),
+            nn.Tanh(),
+            nn.Linear(HID_SIZE, HID_SIZE),
+            nn.Tanh(),
+            nn.Linear(HID_SIZE, act_size),
+            nn.Tanh(),
+        )
+        # 作用 看名称像是方差：是用来控制动作的探索程度的
+        # 怎么更新？：在训练的过程中，会不断的更新这个参数，更新的逻辑就在于计算熵损失以及计算动作优势大小的时候会参与计算，然后在梯度更新的时候，会自动更新这个参数到合适的大小
+        self.logstd = nn.Parameter(torch.zeros(act_size))
 
-        while repeat - 1:
-            layers.append(LinearBottleNeck(out_channels, out_channels, 1, t))
-            repeat -= 1
+    def forward(self, x):
+        return self.mu(x)
 
-        return nn.Sequential(*layers)
+
+class ModelCriticLinear(nn.Module):
+    '''
+    trop信赖域策略优化评价网络
+    ACKTR算法中使用的critic网络
+    ppt优化评价网络
+    '''
+    def __init__(self, obs_size):
+        super(ModelCriticLinear, self).__init__()
+
+        self.value = nn.Sequential(
+            nn.Linear(obs_size, HID_SIZE),
+            nn.ReLU(),
+            nn.Linear(HID_SIZE, HID_SIZE),
+            nn.ReLU(),
+            nn.Linear(HID_SIZE, 1),
+        )
+
+    def forward(self, x):
+        return self.value(x)
