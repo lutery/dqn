@@ -159,6 +159,8 @@ class KFACOptimizer(optim.Optimizer):
             lr=self.lr * (1 - self.momentum),
             momentum=self.momentum)
 
+        self.acc_stats = True
+
     def _save_input(self, module, input):
         if self.steps % self.Ts == 0:
             classname = module.__class__.__name__
@@ -204,7 +206,7 @@ class KFACOptimizer(optim.Optimizer):
                 module.register_forward_pre_hook(self._save_input)
                 module.register_full_backward_hook(self._save_grad_output)
 
-    def step(self):
+    def step(self, **kwargs):
         # Add weight decay
         if self.weight_decay > 0:
             for p in self.model.parameters():
