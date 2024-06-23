@@ -4,6 +4,7 @@ import ptan
 import numpy as np
 import argparse
 from tensorboardX import SummaryWriter
+import os
 
 import torch
 import torch.nn as nn
@@ -107,11 +108,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
+    save_path = os.path.join("saves", "a2c-" + args.name)
     envs = [TransposeObservation(gym.make("CarRacing-v2", domain_randomize=False, continuous=False)) for _ in range(NUM_ENVS)]
     writer = SummaryWriter(comment="-pong-a2c_" + args.name)
 
     net = AtariA2C(envs[0].observation_space.shape, envs[0].action_space.n).to(device)
     print(net)
+    if (os.path.exists(os.path.join(save_path, "a2c.pth"))):
+        net.load_state_dict(torch.load(os.path.join(save_path, "a2c.pth")))
 
     agent = ptan.agent.PolicyAgent(lambda x: net(x)[0], apply_softmax=True, device=device)
     exp_source = ptan.experience.ExperienceSourceFirstLast(envs, agent, gamma=GAMMA, steps_count=REWARD_STEPS)
@@ -169,3 +173,6 @@ if __name__ == "__main__":
                 tb_tracker.track("grad_l2",         np.sqrt(np.mean(np.square(grads))), step_idx)
                 tb_tracker.track("grad_max",        np.max(np.abs(grads)), step_idx)
                 tb_tracker.track("grad_var",        np.var(grads), step_idx)
+
+                if step_idx % 2 == 0:
+                    torch.save(net.state_dict(), os.path.join(save_path, "a2c.pth"))
