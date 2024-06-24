@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+'''
+todo
+1. 验证保存的模型是否达到了最大奖励也就是能够完成游戏
+2. 如果未完成进一步考虑如何提高精度以提高平均奖励值
+'''
 import gymnasium as gym
 import ptan
 import numpy as np
@@ -109,21 +114,24 @@ if __name__ == "__main__":
     device = torch.device("cuda" if args.cuda else "cpu")
 
     save_path = os.path.join("saves", "a2c-" + args.name)
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
     envs = [TransposeObservation(gym.make("CarRacing-v2", domain_randomize=False, continuous=False)) for _ in range(NUM_ENVS)]
     writer = SummaryWriter(comment="-pong-a2c_" + args.name)
 
     net = AtariA2C(envs[0].observation_space.shape, envs[0].action_space.n).to(device)
     print(net)
-    if (os.path.exists(os.path.join(save_path, "a2c.pth"))):
-        net.load_state_dict(torch.load(os.path.join(save_path, "a2c.pth")))
+    if (os.path.exists(os.path.join(save_path, "a2c-5.pth"))):
+        net.load_state_dict(torch.load(os.path.join(save_path, "a2c-5.pth")))
 
     agent = ptan.agent.PolicyAgent(lambda x: net(x)[0], apply_softmax=True, device=device)
     exp_source = ptan.experience.ExperienceSourceFirstLast(envs, agent, gamma=GAMMA, steps_count=REWARD_STEPS)
     optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE, eps=1e-3)
 
     batch = []
+    best_reward = 600
 
-    with common.RewardTracker(writer, stop_reward=18) as tracker:
+    with common.RewardTracker(writer, stop_reward=900) as tracker:
         with ptan.common.utils.TBMeanTracker(writer, batch_size=10) as tb_tracker:
             for step_idx, exp in enumerate(exp_source):
                 batch.append(exp)
@@ -132,6 +140,10 @@ if __name__ == "__main__":
                 if new_rewards:
                     if tracker.reward(new_rewards[0], step_idx):
                         break
+
+                    if new_rewards[0] > best_reward:
+                        best_reward = new_rewards[0]
+                        torch.save(net.state_dict(), os.path.join(save_path, "a2c-best-{}.pth".format(best_reward)))
 
                 if len(batch) < BATCH_SIZE:
                     continue
@@ -163,6 +175,8 @@ if __name__ == "__main__":
                 optimizer.step()
                 loss_v += loss_policy_v
 
+                torch.save(net.state_dict(), os.path.join(save_path, f"a2c-{step_idx % 10}.pth"))
+
                 tb_tracker.track("advantage",       adv_v, step_idx)
                 tb_tracker.track("values",          value_v, step_idx)
                 tb_tracker.track("batch_rewards",   vals_ref_v, step_idx)
@@ -173,6 +187,3 @@ if __name__ == "__main__":
                 tb_tracker.track("grad_l2",         np.sqrt(np.mean(np.square(grads))), step_idx)
                 tb_tracker.track("grad_max",        np.max(np.abs(grads)), step_idx)
                 tb_tracker.track("grad_var",        np.var(grads), step_idx)
-
-                if step_idx % 2 == 0:
-                    torch.save(net.state_dict(), os.path.join(save_path, "a2c.pth"))
