@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 '''
 todo
-1. 验证保存的模型是否达到了最大奖励也就是能够完成游戏
 2. 如果未完成进一步考虑如何提高精度以提高平均奖励值
 '''
 import gymnasium as gym
