@@ -2,3 +2,7 @@
 ```shell
 python -m learning.breakout.dqn_basic
 ```
+
+# 参考链接
+https://github.com/louisnino/RLcode/tree/master
+https://github.com/tensorlayer/TensorLayer/blob/master/examples/reinforcement_learning/tutorial_TD3.py
