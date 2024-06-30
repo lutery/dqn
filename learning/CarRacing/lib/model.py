@@ -423,19 +423,33 @@ class ModelActor(nn.Module):
 
     def __init__(self, obs_size, act_size):
         super().__init__()
+        obs = (obs_size[2], obs_size[0], obs_size[1])
 
-        self.conv1 = nn.Conv2d(obs_size[2], 128, kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(128, 256, kernel_size=2, stride=2)
-        self.conv3 = nn.Conv2d(256, 512, kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(73728, act_size)
-        self.relu = nn.ReLU(inplace=True)
+        self.conv = nn.Sequential(
+            nn.Conv2d(obs[0], 32, kernel_size=8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.ReLU()
+        )
+        conv_out_size = self._get_conv_out(obs)
+        self.fc1 = nn.Sequential(
+            nn.Linear(conv_out_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, act_size))
+
         self.logstd = nn.Parameter(torch.zeros(act_size))
-    
+
+
+    def _get_conv_out(self, shape):
+        o = self.conv(torch.zeros(1, *shape))
+        return int(np.prod(o.size()))
+
 
     def forward(self, x):
-        x = self.relu(self.conv1(x))
-        x = self.relu(self.conv2(x))
-        x = self.relu(self.conv3(x))
+        x = x.float() / 256
+        x = self.conv(x)
         x = self.fc1(x.view(x.shape[0], -1))
         return x
 
@@ -445,16 +459,29 @@ class ModelCritic(nn.Module):
     def __init__(self, obs_size):
         super().__init__()
 
-        self.conv1 = nn.Conv2d(obs_size[2], 128, kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(128, 256, kernel_size=2, stride=2)
-        self.conv3 = nn.Conv2d(256, 512, kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(73728, 1)
-        self.relu = nn.ReLU(inplace=True)
+        obs = (obs_size[2], obs_size[0], obs_size[1])
+
+        self.conv = nn.Sequential(
+            nn.Conv2d(obs[0], 32, kernel_size=8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.ReLU()
+        )
+        conv_out_size = self._get_conv_out(obs)
+        self.fc1 = nn.Sequential(
+            nn.Linear(conv_out_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1))
+
+    def _get_conv_out(self, shape):
+        o = self.conv(torch.zeros(1, *shape))
+        return int(np.prod(o.size()))
 
     def forward(self, x):
-        x = self.relu(self.conv1(x))
-        x = self.relu(self.conv2(x))
-        x = self.relu(self.conv3(x))
+        x = x.float() / 256
+        x = self.conv(x)
         x = self.fc1(x.view(x.shape[0], -1))
         return x
     
