@@ -134,7 +134,7 @@ def process_in_batches(data, model, batch_size):
     # 遍历并处理每个批次
     with torch.no_grad():  # 关闭梯度计算
         for i in range(0, total_size, batch_size):
-            print("Processing batch {}/{}".format(i // batch_size + 1, total_size // batch_size))
+            # print("Processing batch {}/{}".format(i // batch_size + 1, total_size // batch_size))
             # 获取当前批次的数据
             batch = data[i:min(i + batch_size, total_size)]
             
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join(r"M:\Projects\python\my_-nqd\learning\CarRacing\saves", "ppo-" + args.name)
+    save_path = os.path.join(r"K:\Projects\python\DQN\learning\CarRacing\saves", "ppo-" + args.name)
     os.makedirs(save_path, exist_ok=True)
 
     env = TransposeObservation(gym.make(args.env, domain_randomize=True, continuous=True))
