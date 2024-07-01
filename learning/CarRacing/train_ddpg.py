@@ -79,6 +79,11 @@ if __name__ == "__main__":
     crt_net = model.DDPGCritic(env.observation_space.shape, env.action_space.shape[0]).to(device)
     print(act_net)
     print(crt_net)
+    if (os.path.exists(os.path.join(save_path, "act.pth"))):
+        act_net.load_state_dict(torch.load(os.path.join(save_path, "act.pth")))
+
+    if (os.path.exists(os.path.join(save_path, "crt.pth"))):
+        crt_net.load_state_dict(torch.load(os.path.join(save_path, "crt.pth")))
     # 对于直接输出Q值网络，需要构建一个稳定的目标，因为Q值网络是会根据历史数据进行更新
     # 所以不能马上更新目标网络，为了稳定，否则会因为部分不稳定的数据（偶发的高分或者低分影响）
     tgt_act_net = ptan.agent.TargetNet(act_net)
@@ -168,12 +173,15 @@ if __name__ == "__main__":
                         if best_reward is not None:
                             print("Best reward updated: %.3f -> %.3f" % (best_reward, rewards))
                             name = "best_%+.3f_%d.dat" % (rewards, frame_idx)
+                            crt_name = "best_crt_%+.3f_%d.dat" % (rewards, frame_idx)
                             fname = os.path.join(save_path, name)
+                            crt_fname = os.path.join(save_path, crt_name)
                             torch.save(act_net.state_dict(), fname)
+                            torch.save(crt_net.state_dict(), crt_fname)
                         best_reward = rewards
 
                 #保存act模型和crt模型
-                torch.save(act_net.state_dict(), os.path.join(save_path, f"act-{frame_idx % 5}.pth"))
-                torch.save(crt_net.state_dict(), os.path.join(save_path, f"crt-{frame_idx % 5}.pth"))
+                torch.save(act_net.state_dict(), os.path.join(save_path, f"act-{frame_idx % 10}.pth"))
+                torch.save(crt_net.state_dict(), os.path.join(save_path, f"crt-{frame_idx % 10}.pth"))
 
     pass
