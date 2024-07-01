@@ -79,17 +79,35 @@ class DDPGActor(nn.Module):
         '''
         super(DDPGActor, self).__init__()
 
-        self.net = nn.Sequential(
-            nn.Linear(obs_size, 400),
+        obs_action = (obs_size[2], obs_size[0], obs_size[1])
+        self.conv = nn.Sequential(
+            nn.Conv2d(obs_action[0], 32, kernel_size=8, stride=4),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Linear(400, 300),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.Linear(300, act_size),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU()
+        )
+
+        conv_out_size = self._get_conv_out(obs_action)
+        self.fc = nn.Sequential(
+            nn.Linear(conv_out_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, act_size),
             nn.Tanh()
         )
 
+    def _get_conv_out(self, shape):
+        o = self.conv(torch.zeros(1, *shape))
+        return int(np.prod(o.size()))
+
     def forward(self, x):
-        return self.net(x)
+        fx = x.float() / 256
+        conv_out = self.conv(fx).view(fx.size()[0], -1)
+        return self.fc(conv_out)
 
 
 class DDPGCritic(nn.Module):
@@ -103,25 +121,34 @@ class DDPGCritic(nn.Module):
         '''
         super(DDPGCritic, self).__init__()
 
-        # 构建环境观察网络
-        self.obs_net = nn.Sequential(
-            nn.Linear(obs_size, 400),
+        obs_action = (obs_size[2], obs_size[0], obs_size[1])
+        self.conv = nn.Sequential(
+            nn.Conv2d(obs_action[0], 32, kernel_size=8, stride=4),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU()
         )
 
-        # 构建观察+动作合并网路，输出评价Q值
-        # 以前的Q值网络是输出每个动作的Q值，在连续值里面是直接输出评价Q值
-        # 这里的400是self.obs_net的输出维度，act_size是动作网络的输出维度
-        # 为了后续合并预测评价做准备
-        self.out_net = nn.Sequential(
-            nn.Linear(400 + act_size, 300),
+        conv_out_size = self._get_conv_out(obs_action)
+        self.fc = nn.Sequential(
+            nn.Linear(conv_out_size + act_size, 512),
             nn.ReLU(),
-            nn.Linear(300, 1)
+            nn.Linear(512, 1)
         )
+
+    def _get_conv_out(self, shape):
+        o = self.conv(torch.zeros(1, *shape))
+        return int(np.prod(o.size()))
 
     def forward(self, x, a):
-        obs = self.obs_net(x)
-        return self.out_net(torch.cat([obs, a], dim=1))
+        fx = x.float() / 256
+        conv_out = self.conv(fx).view(fx.size()[0], -1)
+        return self.fc(torch.cat([conv_out, a], dim=1))
 
 
 class D4PGCritic(nn.Module):
