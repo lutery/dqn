@@ -79,12 +79,12 @@ if __name__ == "__main__":
     crt_net = model.DDPGCritic(env.observation_space.shape, env.action_space.shape[0]).to(device)
     print(act_net)
     print(crt_net)
-    if (os.path.exists(os.path.join(save_path, "best_-63.314_26000.dat"))):
-        act_net.load_state_dict(torch.load(os.path.join(save_path, "best_-63.314_26000.dat")))
+    if (os.path.exists(os.path.join(save_path, "act-0.pth"))):
+        act_net.load_state_dict(torch.load(os.path.join(save_path, "act-0.pth")))
         print("加载act模型成功")
 
-    if (os.path.exists(os.path.join(save_path, "best_crt_-63.314_26000.dat"))):
-        crt_net.load_state_dict(torch.load(os.path.join(save_path, "best_crt_-63.314_26000.dat")))
+    if (os.path.exists(os.path.join(save_path, "crt-0.pth"))):
+        crt_net.load_state_dict(torch.load(os.path.join(save_path, "crt-0.pth")))
         print("加载crt模型成功")
     # 对于直接输出Q值网络，需要构建一个稳定的目标，因为Q值网络是会根据历史数据进行更新
     # 所以不能马上更新目标网络，为了稳定，否则会因为部分不稳定的数据（偶发的高分或者低分影响）
