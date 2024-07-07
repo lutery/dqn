@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-python .\train_ddpg.py -n ddpg-caracing
+python .\train_ddpg.py -n caracing
 目前发现整体是可以训练的，目前已经达到了正向奖励，就是不知道能到多高
 '''
 
