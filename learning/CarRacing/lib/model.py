@@ -151,6 +151,84 @@ class DDPGCritic(nn.Module):
         return self.fc(torch.cat([conv_out, a], dim=1))
 
 
+class DDPGActorSimple(nn.Module):
+    '''
+    深度确定性策略梯度动作预测网络
+    '''
+    def __init__(self, obs_size, act_size):
+        '''
+        obs_size: 环境的维度
+        act_size: 能够同时执行动作的个数（比如有多个手，不是每个手可以执行哪些动作）
+        '''
+        super(DDPGActorSimple, self).__init__()
+        self.train_action = True
+        self.train_qvalue = True
+
+        obs_action = (obs_size[2], obs_size[0], obs_size[1])
+        self.conv = nn.Sequential(
+            nn.Conv2d(obs_action[0], 32, kernel_size=8, stride=4),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU()
+        )
+
+        conv_out_size = self._get_conv_out(obs_action)
+        self.action = nn.Sequential(
+            nn.Linear(conv_out_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, act_size),
+            nn.Tanh()
+        )
+
+        self.qvalue = nn.Sequential(
+            nn.Linear(conv_out_size + act_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1)
+        )
+
+    def _get_conv_out(self, shape):
+        o = self.conv(torch.zeros(1, *shape))
+        return int(np.prod(o.size()))
+
+    def forward(self, x, a=None):
+        fx = x.float() / 256
+        conv_out = self.conv(fx).view(fx.size()[0], -1)
+
+        if a is None:
+            with torch.set_grad_enabled(self.train_action):
+                pred_action = self.action(conv_out)
+            with torch.set_grad_enabled(self.train_qvalue):
+                qvalue = self.qvalue(torch.cat([conv_out, pred_action], dim=1))
+        else:
+            with torch.set_grad_enabled(self.train_action):
+                pred_action = self.action(conv_out)
+            with torch.set_grad_enabled(self.train_qvalue):
+                qvalue = self.qvalue(torch.cat([conv_out, a], dim=1))
+        return pred_action, qvalue
+
+    def set_train_qvalue(self, freeze=True):
+        for param in self.action.parameters():
+            param.requires_grad = not freeze
+
+    def set_train_action(self, freeze=True):
+        for param in self.qvalue.parameters():
+            param.requires_grad = not freeze
+
+    def get_shared_parameter(self):
+        return list(self.conv.parameters())
+
+    def get_action_parameter(self):
+        return list(self.action.parameters()) + self.get_shared_parameter()
+
+    def get_qvalue_parameter(self):
+        return list(self.qvalue.parameters()) + self.get_shared_parameter()
+
+
 class D4PGCritic(nn.Module):
     '''
     D4PG自己的Q值评价网路
