@@ -223,7 +223,7 @@ class DDPGActorSimple(nn.Module):
         return list(self.conv.parameters())
 
     def get_action_parameter(self):
-        return list(self.action.parameters()) + self.get_shared_parameter()
+        return list(self.action.parameters())
 
     def get_qvalue_parameter(self):
         return list(self.qvalue.parameters()) + self.get_shared_parameter()
