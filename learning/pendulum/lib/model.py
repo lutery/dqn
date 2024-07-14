@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributions as dist
 
 HID_SIZE = 128
 
@@ -66,6 +67,77 @@ class ModelA2C(nn.Module):
         '''
         base_out = self.base(x)
         return self.mu(base_out), self.var(base_out), self.value(base_out)
+
+
+class SACActor(nn.Module):
+    '''
+    深度确定性策略梯度动作预测网络
+    '''
+    def __init__(self, obs_size, act_size, hidden_dim, action_range = 1., init_w = 3e-3, log_std_min = -20, log_std_max = 2):
+        '''
+        obs_size: 环境的维度
+        act_size: 能够同时执行动作的个数（比如有多个手，不是每个手可以执行哪些动作）
+        '''
+        super(SACActor, self).__init__()
+        self.log_std_min = log_std_min
+        self.log_std_max = log_std_max
+        self.action_range = action_range
+        self.act_size = act_size
+
+        # todo sac代码中对网络权重进行了初始化，这里是对网络权重进行初始化，是否是必须的？
+        self.net = nn.Sequential(
+            nn.Linear(obs_size, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
+        )
+
+        self.mean_linear = nn.Linear(hidden_dim, act_size)
+        self.log_std_linear = nn.Linear(hidden_dim, act_size)
+
+    def forward(self, x):
+        x = self.net(x)
+        mean = self.mean_linear(x)
+        log_std = self.log_std_linear(x)
+        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+
+        return mean, log_std
+
+
+    def evaluate(self, state, device, epsilon=1e-6):
+        state_v = ptan.agent.float32_preprocessor(state).to(device)
+        mean, log_std = self(state_v)
+        mean, log_std = mean.data.cpu().numpy(), log_std.data.cpu().numpy()
+        std = torch.exp(log_std)
+        normal = dist.Normal(0, 1)
+        z = normal.sample(mean.shape)
+        action_0 = torch.tanh(mean + std * z)
+        action = action_0 * self.action_range
+        log_prob = dist.Normal(mean, std).log_prob(mean + std * z) - torch.log(1. - action_0 ** 2 + epsilon) - torch.log(self.action_range)
+        log_prob = log_prob.sum(1, dim=1).unsqueeze(1)
+
+        return action, log_prob, z, mean, log_std
+
+
+    def get_action(self, state, device, greedy=False):
+        state_v = ptan.agent.float32_preprocessor(state).to(device)
+        mean, log_std = self(state_v)
+        mean, log_std = mean.data.cpu().numpy(), log_std.data.cpu().numpy()
+        std = torch.exp(log_std)
+        normal = dist.Normal(0, 1)
+        z = normal.sample(mean.shape)
+        action = torch.tanh(mean + std * z)
+        action = action * self.action_range
+
+        action = self.action_range * torch.tanh(mean) if greedy else action
+        return action
+
+
+    def sample_action(self):
+        action = torch.randn(self.act_size) * 2 - 1
+        return self.action_range * action
 
 
 class TD3Actor(nn.Module):

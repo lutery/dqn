@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 '''
-整改后，会比原先号，但是还未验证是否真的可以训练
-未验证
+整改后，验证通过，可以得到让游戏成功的动作，但是不知道为啥越往后训练效果越差，最好的结果是在中间的某个时候
+但是经过实际的模型测试，发现后面的模型虽然最高分比不上中间的模型，但是也是可以完成游戏的，效果还不错
+
 1. 本游戏
 2. 其他游戏
-3. 补充注释，对比ddpg，提取关键点
 
 参考代码：https://github.com/louisnino/RLcode/blob/master/tutorial_TD3.py#L225
 https://blog.csdn.net/hhy_csdn/article/details/107090780

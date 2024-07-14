@@ -34,7 +34,7 @@ TEST_ITERS = 1000
 eval_noise_scale = 0.5
 explore_noise_scale = 1.0
 reward_scale = 1.
-policy_target_update_interval = 3
+policy_target_update_interval = 1
 
 class SAC():
     def __init__(self, obs_space, action_space, hidden_dim, action_range, device="cpu"):
@@ -182,9 +182,9 @@ if __name__ == "__main__":
                 # 归一化奖励
                 rewards_v = reward_scale * (rewards_v - rewards_v.mean()) / (rewards_v.std() + 1e-6)
                 # 使用目标动作预测网路，根据下一个状态预测执行的动作
-                last_act_v = sac.target_act_net.target_model.evaluate(last_states_v, eval_noise_scale)
+                pred_act, pred_log_prob = sac.act_net.evaluate(last_states_v, eval_noise_scale)
                 # 使用目标评测网络，根据下一个状态和下一个状态将要执行的动作得到下一个状态的评价Q值
-                q_last_v = torch.min(sac.target_crt1_net.target_model(last_states_v, last_act_v), sac.target_crt2_net.target_model(last_states_v, last_act_v))
+                q_last_v = torch.min(sac.target_crt1_net.target_model(last_states_v, pred_act), sac.target_crt2_net.target_model(last_states_v, pred_act)) - alpha * pred_log_prob
                 # 如果是结束状态则将奖励置为0
                 q_last_v[dones_mask.bool()] = 0.0
                 # 计算Q值 bellman公式
@@ -212,23 +212,18 @@ if __name__ == "__main__":
                 if sac.update_cnt % policy_target_update_interval == 0:
                     # train actor
                     sac.act_opt.zero_grad()
-                    new_action, new_log_prob, _, _ = sac.act_net.evaluate(states_v, device)
-                    target_q_min = torch.min(sac.target_crt1_net.target_model(states_v, new_action),
-                                         sac.target_crt2_net.target_model(states_v, new_action)) - alpha * new_log_prob
-                    # 根据状态和预测的动作计算Q值的负值
-                    # 这里是根据网络预测的动作和实际的状态获取评价
-                    # 在评价前取负号，就是简单粗暴的取最小值，从而达到最大值Q值的目的
-                    # 由于这里评价网络是固定是，所以最大化Q值，只有更新预测的动作，使得
-                    # 评价Q值达到最大值的目的
-                    actor_loss_v = -sac.crt1_net(states_v, cur_actions_v)
-                    actor_loss_v = actor_loss_v.mean()
+                    new_action, new_log_prob, z, mean, log_std = sac.act_net.evaluate(states_v, device)
+                    # todo 实现方式1：使用Q值最小化的方式
+                    # 实现方式2：直接使用任意一个Q网络
+                    pred_q_val = sac.crt1_net(states_v, new_action)
+                    actor_loss_v = (alpha * new_log_prob - pred_q_val).mean()
                     actor_loss_v.backward()
-                    td3.act_opt.step()
+                    sac.act_opt.step()
                     tb_tracker.track("loss_actor", actor_loss_v, frame_idx)
 
-                    # 将训练网路同步到目标网络上，但是这里是每次都同步，与之前每隔n步同步一次不同
-                    # 这里之所以这样做，是根据测试可知，每次都同步，并使用较小的权重进行同步
-                    # 缓存的同步效果更好，并且能够保持平滑的更新
+                    if auto_entropy is True:
+
+
                     td3.target_act_net.alpha_sync(alpha=1 - 1e-3)
                     td3.target_crt1_net.alpha_sync(alpha=1 - 1e-3)
                     td3.target_crt2_net.alpha_sync(alpha=1 - 1e-3)
