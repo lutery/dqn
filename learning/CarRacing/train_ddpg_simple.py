@@ -3,21 +3,37 @@
 python .\train_ddpg_simple.py -n caracing_simple
 
 todo 根据以下训练记录可知，貌似是可以提高的，还有待实验
-926: done 1 episodes, mean reward -152.400, speed 75.47 f/s
-1926: done 2 episodes, mean reward -101.020, speed 73.72 f/s
-2926: done 3 episodes, mean reward -91.389, speed 68.83 f/s
-3926: done 4 episodes, mean reward -89.023, speed 61.89 f/s
-4926: done 5 episodes, mean reward -82.330, speed 65.74 f/s
-5926: done 6 episodes, mean reward -80.816, speed 69.01 f/s
-6926: done 7 episodes, mean reward -79.786, speed 64.02 f/s
-7874: done 8 episodes, mean reward -88.393, speed 64.99 f/s
-8874: done 9 episodes, mean reward -84.561, speed 66.99 f/s
-9874: done 10 episodes, mean reward -80.451, speed 66.51 f/s
-Test done in 147.80 sec, reward -49.995, steps 1000
-10874: done 11 episodes, mean reward -78.982, speed 2.79 f/s
-Test done in 152.85 sec, reward 62.940, steps 1000
-Best reward updated: -49.995 -> 62.940
-11874: done 12 episodes, mean reward -72.432, speed 2.62 f/s
+1001: done 1 episodes, mean reward -49.254, speed 49.03 f/s
+2001: done 2 episodes, mean reward -53.721, speed 51.34 f/s
+3001: done 3 episodes, mean reward -48.791, speed 52.23 f/s
+4001: done 4 episodes, mean reward -52.118, speed 47.59 f/s
+5001: done 5 episodes, mean reward -48.610, speed 49.69 f/s
+6001: done 6 episodes, mean reward -53.552, speed 51.00 f/s
+7001: done 7 episodes, mean reward -52.814, speed 53.48 f/s
+8001: done 8 episodes, mean reward -50.762, speed 53.51 f/s
+9001: done 9 episodes, mean reward -52.649, speed 54.86 f/s
+Test done in 186.86 sec, reward -93.294, steps 1000
+10001: done 10 episodes, mean reward -53.655, speed 4.83 f/s
+Test done in 189.01 sec, reward -91.472, steps 1000
+Best reward updated: -93.294 -> -91.472
+11001: done 11 episodes, mean reward -50.051, speed 2.07 f/s
+Test done in 188.15 sec, reward -91.163, steps 1000
+Best reward updated: -91.472 -> -91.163
+12001: done 12 episodes, mean reward -51.275, speed 2.05 f/s
+Test done in 191.79 sec, reward -88.097, steps 1000
+Best reward updated: -91.163 -> -88.097
+13001: done 13 episodes, mean reward -53.270, speed 2.02 f/s
+Test done in 196.94 sec, reward -10.841, steps 1000
+Best reward updated: -88.097 -> -10.841
+14001: done 14 episodes, mean reward -52.526, speed 1.99 f/s
+Test done in 195.29 sec, reward 83.870, steps 1000
+Best reward updated: -10.841 -> 83.870
+15001: done 15 episodes, mean reward -54.166, speed 2.02 f/s
+Test done in 196.78 sec, reward 30.166, steps 1000
+16001: done 16 episodes, mean reward -50.824, speed 2.01 f/s
+Test done in 198.75 sec, reward 100.002, steps 1000
+Best reward updated: 83.870 -> 100.002
+17001: done 17 episodes, mean reward -49.674, speed 2.01 f/s
 '''
 
 import os
