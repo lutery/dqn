@@ -1,9 +1,39 @@
 #!/usr/bin/env python3
 '''
+整改后，会比原先号，但是还未验证是否真的可以训练
 未验证
 1. 本游戏
 2. 其他游戏
 3. 补充注释，对比ddpg，提取关键点
+
+
+td3算法对比ddpg算法的改进点：
+1. 关于动作空间测探索范围不算td3的改进点，所以可以用ddpg中的OU方法进行动作空间的探索
+DDPG和TD3在探索机制上没有根本性差别，两者都可以使用动作噪声（如高斯噪声或奥恩斯坦-乌伦贝克（OU）噪声）来促进探索。但是由于TD3的双重评价网络和延迟更新机制，所以可能有更好的探索机制，通常是使用简单的高斯噪声添加到探索动作上。
+
+2.  双重Critic网络
+DDPG：使用单一的Critic网络来估计状态-动作对的值函数（Q函数）。
+TD3：使用两个Critic网络（双重Q学习），并在训练时取这两个网络输出的较小值来进行梯度更新。这种做法减少了值函数的过估计倾向，从而提高了学习过程的稳定性和策略的最终性能。
+
+3. 策略更新延迟
+DDPG：每次收到转换（transition）后都会更新策略网络。
+TD3：策略网络的更新频率低于Critic网络，即策略网络的更新是延迟的，比如每两次Critic更新才进行一次策略更新。这种延迟更新策略进一步防止了因Critic估计误差大而导致的策略性能下降。
+
+4. 目标策略平滑
+DDPG：在使用目标策略网络生成动作来计算目标Q值时，直接采用目标策略网络的输出。
+TD3：在目标策略网络生成的动作上添加噪声（通常是限制在一个小范围内的高斯噪声），以进行目标策略平滑。这种方法通过平滑目标策略的输出来降低Q值估计的方差，进一步增强算法的稳定性。
+
+这里说的平滑是指在更新评价网络时，通过给目标动作网络添加噪声，使得评价网络的能够考虑到范围更大的动作空间内的Q值，从而使得网络减少过拟合增强鲁棒性，不再受微小动作的改变而产生较大的Q值变化（因为它将预测动作的领域内都一起考虑在内得到相类似的Q值）
+
+5. 目标网络的同步时机是在动作网络更新时，将所有目标网络进行同步
+
+6 超参数选择不那么敏感，可能是因为有两个Q网络并且在训练时取最小值，所以对于Q值的估计更加稳定
+
+
+7. 将奖励归一化应该也不是区别之一，都可以采用
+
+
+TD3 更加适合高维的动作空间会比ddpg有更好的表现
 '''
 
 import os
@@ -35,14 +65,13 @@ eval_noise_scale = 0.5
 explore_noise_scale = 1.0
 reward_scale = 1.
 policy_target_update_interval = 3
-action_range = 1.
 
 class TD3():
-    def __init__(self, obs_space, action_range, device="cpu"):
+    def __init__(self, obs_space, action_space, action_range, device="cpu"):
         self.device = device
-        self.act_net = model.DDPGActor(obs_space.shape[0], obs_space.shape[0]).to(device)
-        self.crt1_net = model.DDPGCritic(obs_space.shape[0], obs_space.shape[0]).to(device)
-        self.crt2_net = model.DDPGCritic(obs_space.shape[0], obs_space.shape[0]).to(device)
+        self.act_net = model.TD3Actor(obs_space.shape[0], action_space.shape[0], action_range).to(device)
+        self.crt1_net = model.DDPGCritic(obs_space.shape[0], action_space.shape[0]).to(device)
+        self.crt2_net = model.DDPGCritic(obs_space.shape[0], action_space.shape[0]).to(device)
         self.target_crt1_net = ptan.agent.TargetNet(self.crt1_net)
         self.target_crt2_net = ptan.agent.TargetNet(self.crt2_net)
         self.target_act_net = ptan.agent.TargetNet(self.act_net)
@@ -61,17 +90,16 @@ class TD3():
 
 
     def evaluate(self, states, eval_noise_scale):
-        states_v = ptan.agent.float32_preprocessor(states).to(self.device)
+        states_v = states
         mu_v = self.target_act_net.target_model(states_v)
         actions = mu_v.data.cpu().numpy()
-        actions = self.action_range * actions
         normal = dist.Normal(0, 1)
-        eval_noise_clip = 2* eval_noise_scale
+        eval_noise_clip = 1 * eval_noise_scale
         noise = normal.sample(actions.shape) * eval_noise_scale
         noise = np.clip(noise, -eval_noise_clip, eval_noise_clip)
         actions = np.add(actions, noise)
 
-        return torch.tensor(actions, dtype=torch.float32).to(self.device)
+        return actions.clip(-1 * self.action_range, 1 * self.action_range).to(self.device)
 
 
 class TD3Agent(ptan.agent.BaseAgent):
@@ -82,7 +110,7 @@ class TD3Agent(ptan.agent.BaseAgent):
         :param explore_noise_scale:
         :param action_range: todo 这里的动作范围是否需要考虑到不同的游戏
         '''
-        assert isinstance(net, model.DDPGActor)
+        assert isinstance(net, model.TD3Actor)
         self.net = net
         self.explore_noise_scale = explore_noise_scale
         self.action_range = action_range
@@ -95,15 +123,16 @@ class TD3Agent(ptan.agent.BaseAgent):
         states_v = ptan.agent.float32_preprocessor(states).to(self.device)
         mu_v = self.net(states_v)
         actions = mu_v.data.cpu().numpy()
+        self.step += 1
         # todo 500是否可以不用
         if self.step < 500:
             actions = self.rng.uniform(-1, 1, actions.shape)
             actions = self.action_range * actions
         else:
             noise = self.rng.normal(0, 1, actions.shape) * self.explore_noise_scale
-            actions = self.action_range * actions + noise
+            actions = actions + noise
 
-        return actions, agent_states
+        return actions.clip(-1 * self.action_range, 1 * self.action_range), agent_states
 
 
 
@@ -134,19 +163,21 @@ def test_net(net, env, count=10, device="cpu"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cuda", default=False, action='store_true', help='Enable CUDA')
+    parser.add_argument("--cuda", default=True, action='store_true', help='Enable CUDA')
     parser.add_argument("-n", "--name", required=True, help="Name of the run")
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join("saves", "a2c-" + args.name)
+    save_path = os.path.join("saves", "td3-" + args.name)
     os.makedirs(save_path, exist_ok=True)
 
     env = gym.make(ENV_ID, g=9.81)
     test_env = gym.make(ENV_ID, g=9.81)
 
+    action_range = float(env.action_space.high[0])
+
     # 构建动作网络和评价网络
-    td3 = TD3(env.observation_space, action_range=action_range, device=device)
+    td3 = TD3(env.observation_space, env.action_space, action_range=action_range, device=device)
     print(td3.act_net)
     print(td3.crt1_net)
     print(td3.crt2_net)
@@ -161,10 +192,10 @@ if __name__ == "__main__":
         td3.target_crt1_net.target_model.load_state_dict(checkpoint["target_crt1_net"])
         td3.target_crt2_net.target_model.load_state_dict(checkpoint["target_crt2_net"])
         td3.update_cnt = checkpoint["update_cnt"]
-        agent.step = 1000
+        agent.step = checkpoint["step"]
         print("加载模型成功")
 
-    writer = SummaryWriter(comment="-ddpg_" + args.name)
+    writer = SummaryWriter(comment="-td3_" + args.name)
     exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=GAMMA, steps_count=1)
     buffer = ptan.experience.ExperienceReplayBuffer(exp_source, buffer_size=REPLAY_SIZE)
 
@@ -225,7 +256,7 @@ if __name__ == "__main__":
                 if td3.update_cnt % policy_target_update_interval == 0:
                     # train actor
                     td3.act_opt.zero_grad()
-                    cur_actions_v = td3.evaluate(states_v, 0)
+                    cur_actions_v = td3.act_net(states_v)
                     # 根据状态和预测的动作计算Q值的负值
                     # 这里是根据网络预测的动作和实际的状态获取评价
                     # 在评价前取负号，就是简单粗暴的取最小值，从而达到最大值Q值的目的
@@ -261,7 +292,8 @@ if __name__ == "__main__":
                         "best_reward": best_reward,
                         "target_crt1_net": td3.target_crt1_net.target_model.state_dict(),
                         "target_crt2_net": td3.target_crt2_net.target_model.state_dict(),
-                        "target_act_net": td3.target_act_net.target_model.state_dict()
+                        "target_act_net": td3.target_act_net.target_model.state_dict(),
+                        "step": agent.step
                     }
                     torch.save(checkpoint, os.path.join(save_path, "checkpoint_%d.dat" % (frame_idx % 10)))
                     if best_reward is None or best_reward < rewards:

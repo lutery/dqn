@@ -68,6 +68,32 @@ class ModelA2C(nn.Module):
         return self.mu(base_out), self.var(base_out), self.value(base_out)
 
 
+class TD3Actor(nn.Module):
+    '''
+    深度确定性策略梯度动作预测网络
+    '''
+    def __init__(self, obs_size, act_size, action_range = 1):
+        '''
+        obs_size: 环境的维度
+        act_size: 能够同时执行动作的个数（比如有多个手，不是每个手可以执行哪些动作）
+        '''
+        super(TD3Actor, self).__init__()
+
+        self.net = nn.Sequential(
+            nn.Linear(obs_size, 400),
+            nn.ReLU(),
+            nn.Linear(400, 300),
+            nn.ReLU(),
+            nn.Linear(300, act_size),
+            nn.Tanh()
+        )
+
+        self.action_range = action_range
+
+    def forward(self, x):
+        return self.net(x) * self.action_range
+
+
 class DDPGActor(nn.Module):
     '''
     深度确定性策略梯度动作预测网络
