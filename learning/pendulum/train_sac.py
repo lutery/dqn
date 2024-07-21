@@ -28,6 +28,9 @@ BATCH_SIZE = 64
 LEARNING_RATE = 1e-4
 REPLAY_SIZE = 100000 # 重放缓冲区长度，这么长是为了提高稳定性
 REPLAY_INITIAL = 10000 # 重放缓冲区初始化大小
+auto_entropy = True
+target_entropy = -2
+soft_tau = 1e-2
 
 TEST_ITERS = 1000
 
@@ -37,17 +40,21 @@ reward_scale = 1.
 policy_target_update_interval = 1
 
 class SAC():
-    def __init__(self, obs_space, action_space, hidden_dim, action_range, device="cpu"):
+    def __init__(self, obs_space, action_space, hidden_dim, action_range, soft_q_lr=3e-4, policy_lr=3e-4, alpha_lr=3e-4, device="cpu"):
+        super().__init__()
         self.device = device
         self.act_net = model.SACActor(obs_space.shape[0], action_space.shape[0], hidden_dim, action_range).to(device)
         self.crt1_net = model.DDPGCritic(obs_space.shape[0], action_space.shape[0]).to(device)
         self.crt2_net = model.DDPGCritic(obs_space.shape[0], action_space.shape[0]).to(device)
         self.target_crt1_net = ptan.agent.TargetNet(self.crt1_net)
         self.target_crt2_net = ptan.agent.TargetNet(self.crt2_net)
+        self.log_alpha = torch.tensor(0., requires_grad=True, device=device)
+        self.alpha = torch.exp(self.log_alpha)
 
-        self.act_opt = optim.Adam(self.act_net.parameters(), lr=LEARNING_RATE)
-        self.crt1_opt = optim.Adam(self.crt1_net.parameters(), lr=LEARNING_RATE)
-        self.crt2_opt = optim.Adam(self.crt2_net.parameters(), lr=LEARNING_RATE)
+        self.act_opt = optim.Adam(self.act_net.parameters(), lr=policy_lr)
+        self.crt1_opt = optim.Adam(self.crt1_net.parameters(), lr=soft_q_lr)
+        self.crt2_opt = optim.Adam(self.crt2_net.parameters(), lr=soft_q_lr)
+        self.alpha_opt = optim.Adam([self.log_alpha], lr=alpha_lr)
 
         self.action_range = action_range
         self.device = device
@@ -77,18 +84,11 @@ class SACAgent(ptan.agent.BaseAgent):
     def __call__(self, states, agent_states):
         # todo 这边用原来的OU方法是否也可以？
         states_v = ptan.agent.float32_preprocessor(states).to(self.device)
-        mu_v = self.net(states_v)
-        actions = mu_v.data.cpu().numpy()
         self.step += 1
-        # todo 500是否可以不用
         if self.step < 500:
-            actions = self.rng.uniform(-1, 1, actions.shape)
-            actions = self.action_range * actions
+            return self.net.sample_action(), agent_states
         else:
-            noise = self.rng.normal(0, 1, actions.shape) * self.explore_noise_scale
-            actions = actions + noise
-
-        return actions.clip(-1 * self.action_range, 1 * self.action_range), agent_states
+            return self.net.get_action(states_v, device), agent_states
 
 
 
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     action_range = float(env.action_space.high[0])
 
     # 构建动作网络和评价网络
-    sac = SAC(env.observation_space, env.action_space, action_range=action_range, device=device)
+    sac = SAC(env.observation_space, env.action_space, hidden_dim=64, action_range=action_range, device=device)
     print(sac.act_net)
     print(sac.crt1_net)
     print(sac.crt2_net)
@@ -182,9 +182,9 @@ if __name__ == "__main__":
                 # 归一化奖励
                 rewards_v = reward_scale * (rewards_v - rewards_v.mean()) / (rewards_v.std() + 1e-6)
                 # 使用目标动作预测网路，根据下一个状态预测执行的动作
-                pred_act, pred_log_prob = sac.act_net.evaluate(last_states_v, eval_noise_scale)
+                pred_act, pred_log_prob, _, _ = sac.act_net.evaluate(last_states_v, device)
                 # 使用目标评测网络，根据下一个状态和下一个状态将要执行的动作得到下一个状态的评价Q值
-                q_last_v = torch.min(sac.target_crt1_net.target_model(last_states_v, pred_act), sac.target_crt2_net.target_model(last_states_v, pred_act)) - alpha * pred_log_prob
+                q_last_v = torch.min(sac.target_crt1_net.target_model(last_states_v, pred_act), sac.target_crt2_net.target_model(last_states_v, pred_act)) - sac.alpha * pred_log_prob
                 # 如果是结束状态则将奖励置为0
                 q_last_v[dones_mask.bool()] = 0.0
                 # 计算Q值 bellman公式
@@ -209,43 +209,48 @@ if __name__ == "__main__":
                 tb_tracker.track("critic_ref", q_ref_v.mean(), frame_idx)
 
                 # 预测动作
-                if sac.update_cnt % policy_target_update_interval == 0:
-                    # train actor
-                    sac.act_opt.zero_grad()
-                    new_action, new_log_prob, z, mean, log_std = sac.act_net.evaluate(states_v, device)
-                    # todo 实现方式1：使用Q值最小化的方式
-                    # 实现方式2：直接使用任意一个Q网络
-                    pred_q_val = sac.crt1_net(states_v, new_action)
-                    actor_loss_v = (alpha * new_log_prob - pred_q_val).mean()
-                    actor_loss_v.backward()
-                    sac.act_opt.step()
-                    tb_tracker.track("loss_actor", actor_loss_v, frame_idx)
+                # train actor
+                sac.act_opt.zero_grad()
+                new_action, new_log_prob, z, mean, log_std = sac.act_net.evaluate(states_v, device)
+                # todo 实现方式1：使用Q值最小化的方式
+                # 实现方式2：直接使用任意一个Q网络
+                pred_q_val = torch.min(sac.crt1_net(states_v, new_action), sac.crt2_net(states_v, new_action))
+                actor_loss_v = (sac.alpha * new_log_prob - pred_q_val).mean()
+                actor_loss_v.backward()
+                sac.act_opt.step()
+                tb_tracker.track("loss_actor", actor_loss_v, frame_idx)
 
-                    if auto_entropy is True:
+                if auto_entropy is True:
+                    sac.alpha_opt.zero_grad()
+                    alpha_loss = -(sac.log_alpha * (new_log_prob + target_entropy)).mean()
+                    alpha_loss.backward()
+                    sac.alpha_opt.step()
+                    sac.alpha = torch.exp(sac.log_alpha)
+                else:
+                    sac.alpha = 1.0
+                    alpha_loss = 0.0
 
-
-                    td3.target_act_net.alpha_sync(alpha=1 - 1e-3)
-                    td3.target_crt1_net.alpha_sync(alpha=1 - 1e-3)
-                    td3.target_crt2_net.alpha_sync(alpha=1 - 1e-3)
+                # todo 原代码soft_tau是不是1e-3
+                sac.target_crt1_net.alpha_sync(alpha=1 - soft_tau)
+                sac.target_crt2_net.alpha_sync(alpha=1 - soft_tau)
 
                 if frame_idx % TEST_ITERS == 0:
                     # 测试并保存最好测试结果的庶数据
                     ts = time.time()
-                    rewards, steps = test_net(td3.act_net, test_env, device=device)
+                    rewards, steps = test_net(sac.act_net, test_env, device=device)
                     print("Test done in %.2f sec, reward %.3f, steps %d" % (
                         time.time() - ts, rewards, steps))
                     writer.add_scalar("test_reward", rewards, frame_idx)
                     writer.add_scalar("test_steps", steps, frame_idx)
                     checkpoint = {
-                        "act_net": td3.act_net.state_dict(),
-                        "crt1_net": td3.crt1_net.state_dict(),
-                        "crt2_net": td3.crt2_net.state_dict(),
-                        "update_cnt": td3.update_cnt,
+                        "act_net": sac.act_net.state_dict(),
+                        "crt1_net": sac.crt1_net.state_dict(),
+                        "crt2_net": sac.crt2_net.state_dict(),
+                        "update_cnt": sac.update_cnt,
                         "frame_idx": frame_idx,
                         "best_reward": best_reward,
-                        "target_crt1_net": td3.target_crt1_net.target_model.state_dict(),
-                        "target_crt2_net": td3.target_crt2_net.target_model.state_dict(),
-                        "target_act_net": td3.target_act_net.target_model.state_dict(),
+                        "target_crt1_net": sac.target_crt1_net.target_model.state_dict(),
+                        "target_crt2_net": sac.target_crt2_net.target_model.state_dict(),
                         "step": agent.step
                     }
                     torch.save(checkpoint, os.path.join(save_path, "checkpoint_%d.dat" % (frame_idx % 10)))
