@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
-from scipy.stats import norm
 
 HID_SIZE = 128
 
@@ -83,6 +82,7 @@ class SACActor(nn.Module):
         self.log_std_min = log_std_min
         self.log_std_max = log_std_max
         self.action_range = action_range
+        self.action_range_tensor = torch.tensor(action_range, dtype=torch.float32)
         self.act_size = act_size
 
         # todo sac代码中对网络权重进行了初始化，这里是对网络权重进行初始化，是否是必须的？
@@ -108,15 +108,15 @@ class SACActor(nn.Module):
 
 
     def evaluate(self, state, device, epsilon=1e-6):
-        state_v = ptan.agent.float32_preprocessor(state).to(device)
+        state_v = state
         mean, log_std = self(state_v)
-        mean, log_std = mean.data.cpu().numpy(), log_std.data.cpu().numpy()
         std = torch.exp(log_std)
-        z = np.random.normal(loc=0, scale=1, size=mean.shape)
-        action_0 = np.tanh(mean + std * z)
-        action = action_0 * self.action_range
-        log_prob = norm.logpdf(mean + std * z, loc=mean, scale=std) - np.log(1. - action_0 ** 2 + epsilon) - np.log(self.action_range)
-        log_prob = log_prob.sum(1, dim=1).unsqueeze(1)
+        normal = dist.Normal(0, 1)
+        z = normal.sample(mean.shape).to(device)
+        action = torch.tanh(mean + std * z)
+        # action = action * self.action_range
+        log_prob = dist.Normal(mean, std).log_prob(mean + std * z) - torch.log(1. - action ** 2 + epsilon) - torch.log(self.action_range_tensor)
+        log_prob = log_prob.sum(dim=1).unsqueeze(1)
 
         return action, log_prob, z, mean, log_std
 
@@ -132,12 +132,12 @@ class SACActor(nn.Module):
         action = action * self.action_range
 
         action = self.action_range * torch.tanh(mean) if greedy else action
-        return action
+        return action.cpu().numpy()
 
 
     def sample_action(self):
         action = torch.rand((1, self.act_size)) * 2 - 1
-        return self.action_range * action
+        return (self.action_range * action).cpu().numpy()
 
 
 class TD3Actor(nn.Module):

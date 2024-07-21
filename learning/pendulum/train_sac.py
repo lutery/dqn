@@ -185,7 +185,7 @@ if __name__ == "__main__":
                 # 归一化奖励
                 rewards_v = reward_scale * (rewards_v - rewards_v.mean()) / (rewards_v.std() + 1e-6)
                 # 使用目标动作预测网路，根据下一个状态预测执行的动作
-                pred_act, pred_log_prob, _, _ = sac.act_net.evaluate(last_states_v, device)
+                pred_act, pred_log_prob, _, _, _= sac.act_net.evaluate(last_states_v, device)
                 # 使用目标评测网络，根据下一个状态和下一个状态将要执行的动作得到下一个状态的评价Q值
                 q_last_v = torch.min(sac.target_crt1_net.target_model(last_states_v, pred_act), sac.target_crt2_net.target_model(last_states_v, pred_act)) - sac.alpha * pred_log_prob
                 # 如果是结束状态则将奖励置为0
@@ -225,6 +225,7 @@ if __name__ == "__main__":
 
                 if auto_entropy is True:
                     sac.alpha_opt.zero_grad()
+                    _, new_log_prob, _, _, _ = sac.act_net.evaluate(states_v, device)
                     alpha_loss = -(sac.log_alpha * (new_log_prob + target_entropy)).mean()
                     alpha_loss.backward()
                     sac.alpha_opt.step()

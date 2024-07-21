@@ -139,6 +139,8 @@ def unpack_batch_ddqn(batch, device="cpu"):
         else:
             last_states.append(exp.last_state)
     states_v = ptan.agent.float32_preprocessor(states).to(device)
+    # 在这里，如果[]里面是[tensor()...]，那么在这里转换的时候是没办法自动识别正确的维度
+    # 原本应该是(batch_size, 1)， 结果被推到成(batch_size,)，造成后续的torch cat错误
     actions_v = ptan.agent.float32_preprocessor(actions).to(device)
     rewards_v = ptan.agent.float32_preprocessor(rewards).to(device)
     last_states_v = ptan.agent.float32_preprocessor(last_states).to(device)
