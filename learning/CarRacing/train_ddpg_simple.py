@@ -1,39 +1,6 @@
 #!/usr/bin/env python3
 '''
-python .\train_ddpg_simple.py -n caracing_simple
-
-todo 根据以下训练记录可知，貌似是可以提高的，还有待实验
-1001: done 1 episodes, mean reward -49.254, speed 49.03 f/s
-2001: done 2 episodes, mean reward -53.721, speed 51.34 f/s
-3001: done 3 episodes, mean reward -48.791, speed 52.23 f/s
-4001: done 4 episodes, mean reward -52.118, speed 47.59 f/s
-5001: done 5 episodes, mean reward -48.610, speed 49.69 f/s
-6001: done 6 episodes, mean reward -53.552, speed 51.00 f/s
-7001: done 7 episodes, mean reward -52.814, speed 53.48 f/s
-8001: done 8 episodes, mean reward -50.762, speed 53.51 f/s
-9001: done 9 episodes, mean reward -52.649, speed 54.86 f/s
-Test done in 186.86 sec, reward -93.294, steps 1000
-10001: done 10 episodes, mean reward -53.655, speed 4.83 f/s
-Test done in 189.01 sec, reward -91.472, steps 1000
-Best reward updated: -93.294 -> -91.472
-11001: done 11 episodes, mean reward -50.051, speed 2.07 f/s
-Test done in 188.15 sec, reward -91.163, steps 1000
-Best reward updated: -91.472 -> -91.163
-12001: done 12 episodes, mean reward -51.275, speed 2.05 f/s
-Test done in 191.79 sec, reward -88.097, steps 1000
-Best reward updated: -91.163 -> -88.097
-13001: done 13 episodes, mean reward -53.270, speed 2.02 f/s
-Test done in 196.94 sec, reward -10.841, steps 1000
-Best reward updated: -88.097 -> -10.841
-14001: done 14 episodes, mean reward -52.526, speed 1.99 f/s
-Test done in 195.29 sec, reward 83.870, steps 1000
-Best reward updated: -10.841 -> 83.870
-15001: done 15 episodes, mean reward -54.166, speed 2.02 f/s
-Test done in 196.78 sec, reward 30.166, steps 1000
-16001: done 16 episodes, mean reward -50.824, speed 2.01 f/s
-Test done in 198.75 sec, reward 100.002, steps 1000
-Best reward updated: 83.870 -> 100.002
-17001: done 17 episodes, mean reward -49.674, speed 2.01 f/s
+python .\train_ddpg_simple.py -n caracing
 '''
 
 import os
@@ -151,7 +118,7 @@ if __name__ == "__main__":
 
                 # train critic
                 crt_opt.zero_grad()
-                act_crt_net.set_train_action(True)
+                # act_crt_net.set_train_action(True)
                 # 根据状态和动作，得到评价，这里是根据实际游戏的状态和动作获取评价
                 _, q_v = act_crt_net(states_v, actions_v)
                 # 使用目标动作预测网路，根据下一个状态预测执行的动作
@@ -165,20 +132,20 @@ if __name__ == "__main__":
                 critic_loss_v = F.mse_loss(q_v, q_ref_v.detach())
                 critic_loss_v.backward()
                 crt_opt.step()
-                act_crt_net.set_train_action(False)
+                # act_crt_net.set_train_action(False)
                 tb_tracker.track("loss_critic", critic_loss_v, frame_idx)
                 tb_tracker.track("critic_ref", q_ref_v.mean(), frame_idx)
 
                 # train actor
                 act_opt.zero_grad()
-                act_crt_net.set_train_qvalue(True)
+                # act_crt_net.set_train_qvalue(True)
                 # 预测动作
                 cur_actions_v, _ = act_crt_net(states_v)
                 actor_loss_v = -(act_crt_net(states_v, cur_actions_v)[1])
                 actor_loss_v = actor_loss_v.mean()
                 actor_loss_v.backward()
                 act_opt.step()
-                act_crt_net.set_train_qvalue(False)
+                # act_crt_net.set_train_qvalue(False)
                 tb_tracker.track("loss_actor", actor_loss_v, frame_idx)
 
                 # 将训练网路同步到目标网络上，但是这里是每次都同步，与之前每隔n步同步一次不同
