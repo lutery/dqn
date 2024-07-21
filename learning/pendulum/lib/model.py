@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
+from scipy.stats import norm
 
 HID_SIZE = 128
 
@@ -111,21 +112,20 @@ class SACActor(nn.Module):
         mean, log_std = self(state_v)
         mean, log_std = mean.data.cpu().numpy(), log_std.data.cpu().numpy()
         std = torch.exp(log_std)
-        normal = dist.Normal(0, 1)
-        z = normal.sample(mean.shape)
-        action_0 = torch.tanh(mean + std * z)
+        z = np.random.normal(loc=0, scale=1, size=mean.shape)
+        action_0 = np.tanh(mean + std * z)
         action = action_0 * self.action_range
-        log_prob = dist.Normal(mean, std).log_prob(mean + std * z) - torch.log(1. - action_0 ** 2 + epsilon) - torch.log(self.action_range)
+        log_prob = norm.logpdf(mean + std * z, loc=mean, scale=std) - np.log(1. - action_0 ** 2 + epsilon) - np.log(self.action_range)
         log_prob = log_prob.sum(1, dim=1).unsqueeze(1)
 
         return action, log_prob, z, mean, log_std
 
 
     def get_action(self, state, device, greedy=False):
-        state_v = ptan.agent.float32_preprocessor(state).to(device)
-        mean, log_std = self(state_v)
-        mean, log_std = mean.data.cpu().numpy(), log_std.data.cpu().numpy()
-        std = torch.exp(log_std)
+        state_v = state
+        mean, log_std = self.forward(state_v)
+        mean, log_std = mean.data.cpu(), log_std.data.cpu()
+        std = np.exp(log_std)
         normal = dist.Normal(0, 1)
         z = normal.sample(mean.shape)
         action = torch.tanh(mean + std * z)
@@ -136,7 +136,7 @@ class SACActor(nn.Module):
 
 
     def sample_action(self):
-        action = torch.randn(self.act_size) * 2 - 1
+        action = torch.rand((1, self.act_size)) * 2 - 1
         return self.action_range * action
 
 

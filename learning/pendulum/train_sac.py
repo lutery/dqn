@@ -4,6 +4,10 @@
 1. 本游戏
 2. 其他游戏
 3. 补充注释，对比ddpg和SAC，提取关键点
+
+
+参考：https://github.com/quantumiracle/Popular-RL-Algorithms/blob/master/sac_pendulum.py
+
 '''
 
 import os
@@ -18,7 +22,6 @@ from lib import model, common
 
 import torch
 import torch.optim as optim
-import torch.distributions as dist
 import torch.nn.functional as F
 
 
