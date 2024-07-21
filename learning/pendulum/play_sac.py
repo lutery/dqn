@@ -31,6 +31,9 @@ if __name__ == "__main__":
         obs_v = torch.FloatTensor([obs]).to(device)
         mu_v = net(obs_v)[0].cpu()
         action = mu_v.squeeze(dim=0).data.numpy()
+        # 方法2 也可以使用get_action，效果和上面一样
+        #         mu_v = net.get_action(obs_v, device， greedy=True)
+        #         action = mu_v[0]
         # action = np.clip(action, -1, 1)
         obs, reward, done, trunc, _ = env.step(action)
         done = done or trunc

@@ -85,7 +85,8 @@ class SACActor(nn.Module):
         self.action_range_tensor = torch.tensor(action_range, dtype=torch.float32)
         self.act_size = act_size
 
-        # todo sac代码中对网络权重进行了初始化，这里是对网络权重进行初始化，是否是必须的？
+        # sac代码中对网络权重进行了初始化，这里是对网络权重进行初始化，是否是必须的？
+        # 经过试验不是必须要的
         self.net = nn.Sequential(
             nn.Linear(obs_size, hidden_dim),
             nn.ReLU(),
@@ -95,12 +96,38 @@ class SACActor(nn.Module):
             nn.ReLU()
         )
 
+        # 和TD3的网络结构不同点，输出的是均值和对数标准差
+        # 为什么采用对数标准差：
+        # 在强化学习的上下文中，特别是在使用类似Soft Actor-Critic (SAC) 这样的算法时，`log_std`是指对数标准差，即动作分布的标准差的对数。这种表示方法在深度学习和统计模型中很常见，特别是在参数化某些概率分布（如正态分布）时。
+        #
+        # ### **为什么使用对数标准差（log_std）?**
+        #
+        # 使用对数标准差而不是直接使用标准差（std）有几个好处：
+        #
+        # 1. **数值稳定性**：通过将标准差的对数作为优化参数，可以确保在梯度下降过程中标准差保持正数。标准差必须是正数，而直接优化标准差可能在更新过程中导致其变为零或负数，这在数学上没有意义并可能导致运行时错误。
+        #
+        # 2. **无限制的值范围**：对数标准差可以取任意实数值（正无穷到负无穷），这使得优化过程更灵活和容易。对数转换后，参数的范围变得无约束，这对使用诸如梯度下降之类的优化算法更为方便。，而标准差只能是正数，所以采用对数标准差
+        #
+        # 3. **改善学习动态**：对数变换能够扩展参数的有效学习范围，使得小的变化也能在梯度下降中有效反映，增强了模型在参数空间的探索能力。
+        #
+        # ### **在策略网络中的应用**
+        #
+        # 在SAC等算法中，策略网络通常输出一个动作的均值（mean）和对数标准差（log_std）。这些输出被用来参数化动作的概率分布，通常是一个多元正态分布。策略网络的输出如下：
+        #
+        # - **均值（mean）**：描述了给定状态下预期动作的中心位置。
+        # - **对数标准差（log_std）**：描述了动作取值的离散程度，高标准差意味着高不确定性和探索性，低标准差则表示动作更加确定。
+        #
+        # 在从策略中采样动作时，通常的步骤是首先从网络获取均值和对数标准差，计算标准差（通过指数化log_std），然后从以均值为中心、计算得到的标准差为离散度的正态分布中采样。使用`tanh`等激活函数可以进一步将动作限制在特定范围内（如[-1, 1]）。
+        #
+        # 总的来说，`log_std`在算法中的使用增强了模型的灵活性和稳定性，同时支持了有效的探索机制，这对于解决复杂的连续动作空间问题至关重要。
         self.mean_linear = nn.Linear(hidden_dim, act_size)
         self.log_std_linear = nn.Linear(hidden_dim, act_size)
 
     def forward(self, x):
         x = self.net(x)
         mean = self.mean_linear(x)
+        # 限制标准差的范围，作用如下：
+        # 避免极端行为、数值稳定性、保持有效的探索、便于调参
         log_std = self.log_std_linear(x)
         log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
 
@@ -122,15 +149,28 @@ class SACActor(nn.Module):
 
 
     def get_action(self, state, device, greedy=False):
+        # 与TD3的不同点，对于获取的动作探索
+        # 采用的均值和方差的计算方式
         state_v = state
+        # 获取均值和对数标准差
         mean, log_std = self.forward(state_v)
         mean, log_std = mean.data.cpu(), log_std.data.cpu()
+        # 将对数标准差转换为标准差
         std = np.exp(log_std)
+        # 构建标准正太分布，并从中采样和预测的动作均值一样的维度的动作噪声
         normal = dist.Normal(0, 1)
         z = normal.sample(mean.shape)
+        # 将噪声添加仅预测的动作均值中，生成动作
+        # 并将值压缩到[-1, 1]，在转换为实际游戏要执行的动作范围
+        # 从数学上来说，mean + std * z是将上面均值为0标准差为1的噪声分布转换为
+        # 预测的动作均值mean和标准差std的分布中，也就是对动作进行了扰动，也就是探索
+        # todo 这样做之后，虽然进行了随机探索，但是由于公式的是明确的，所以梯度是可以传播的
+        # 整个表达式是可微的，可以用来训练网络
         action = torch.tanh(mean + std * z)
         action = action * self.action_range
 
+        # 如果在测试、验证过程中，需要将greedy设置为True
+        # 这个时候就不添加噪声，而是直接输出mean
         action = self.action_range * torch.tanh(mean) if greedy else action
         return action.cpu().numpy()
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 '''
 通过验证，可以成功训练，并且在40分钟内达到了较好的成绩-120，性能较好，但是如果要更高时间较久，两小时以后达到了成绩108
+todo
 1. 本游戏
 2. 其他游戏
 3. 补充注释，对比ddpg和SAC，提取关键点
@@ -37,10 +38,7 @@ soft_tau = 1e-2
 
 TEST_ITERS = 1000
 
-eval_noise_scale = 0.5
-explore_noise_scale = 1.0
 reward_scale = 1.
-policy_target_update_interval = 1
 
 class SAC():
     def __init__(self, obs_space, action_space, hidden_dim, action_range, soft_q_lr=3e-4, policy_lr=3e-4, alpha_lr=3e-4, device="cpu"):
@@ -49,43 +47,38 @@ class SAC():
         self.act_net = model.SACActor(obs_space.shape[0], action_space.shape[0], hidden_dim, action_range).to(device)
         self.crt1_net = model.DDPGCritic(obs_space.shape[0], action_space.shape[0]).to(device)
         self.crt2_net = model.DDPGCritic(obs_space.shape[0], action_space.shape[0]).to(device)
+        # 与TD3的不同点，没有target目标网络
         self.target_crt1_net = ptan.agent.TargetNet(self.crt1_net)
         self.target_crt2_net = ptan.agent.TargetNet(self.crt2_net)
+        # 与TD3的不同点，多了alpha todo alpha的作用
         self.log_alpha = torch.tensor(0., requires_grad=True, device=device)
         self.alpha = torch.exp(self.log_alpha)
 
         self.act_opt = optim.Adam(self.act_net.parameters(), lr=policy_lr)
         self.crt1_opt = optim.Adam(self.crt1_net.parameters(), lr=soft_q_lr)
         self.crt2_opt = optim.Adam(self.crt2_net.parameters(), lr=soft_q_lr)
+        # 与TD3的不同点，多了alpha优化器
         self.alpha_opt = optim.Adam([self.log_alpha], lr=alpha_lr)
 
         self.action_range = action_range
         self.device = device
-        self.update_cnt = 0
-
-
-    def update(self):
-        self.update_cnt += 1
 
 
 class SACAgent(ptan.agent.BaseAgent):
-    def __init__(self, net, explore_noise_scale, action_range=1., step=0, device="cpu"):
+    def __init__(self, net, action_range=1., step=0, device="cpu"):
         '''
 
         :param net:
-        :param explore_noise_scale:
         :param action_range: todo 这里的动作范围是否需要考虑到不同的游戏
         '''
         assert isinstance(net, model.SACActor)
         self.net = net
-        self.explore_noise_scale = explore_noise_scale
         self.action_range = action_range
         self.step = step
         self.device = device
         self.rng = np.random.default_rng(int(time.time()))
 
     def __call__(self, states, agent_states):
-        # todo 这边用原来的OU方法是否也可以？
         states_v = ptan.agent.float32_preprocessor(states).to(self.device)
         self.step += 1
         if self.step < 500:
@@ -141,7 +134,7 @@ if __name__ == "__main__":
     print(sac.crt1_net)
     print(sac.crt2_net)
 
-    agent = SACAgent(sac.act_net, action_range=action_range, explore_noise_scale=explore_noise_scale, device=device)
+    agent = SACAgent(sac.act_net, action_range=action_range, device=device)
     if (os.path.exists(os.path.join(save_path, "checkpoint_0.dat"))):
         checkpoint = torch.load(os.path.join(save_path, "checkpoint_0.dat"))
         sac.act_net.load_state_dict(checkpoint["act_net"])
@@ -150,7 +143,6 @@ if __name__ == "__main__":
         sac.target_act_net.target_model.load_state_dict(checkpoint["target_act_net"])
         sac.target_crt1_net.target_model.load_state_dict(checkpoint["target_crt1_net"])
         sac.target_crt2_net.target_model.load_state_dict(checkpoint["target_crt2_net"])
-        sac.update_cnt = checkpoint["update_cnt"]
         agent.step = checkpoint["step"]
         print("加载模型成功")
 
@@ -177,7 +169,6 @@ if __name__ == "__main__":
                 if len(buffer) < REPLAY_INITIAL:
                     continue
 
-                sac.update()
                 # 从缓冲区里面采样数据
                 batch = buffer.sample(BATCH_SIZE)
                 states_v, actions_v, rewards_v, dones_mask, last_states_v = common.unpack_batch_ddqn(batch, device)
@@ -250,7 +241,6 @@ if __name__ == "__main__":
                         "act_net": sac.act_net.state_dict(),
                         "crt1_net": sac.crt1_net.state_dict(),
                         "crt2_net": sac.crt2_net.state_dict(),
-                        "update_cnt": sac.update_cnt,
                         "frame_idx": frame_idx,
                         "best_reward": best_reward,
                         "target_crt1_net": sac.target_crt1_net.target_model.state_dict(),
