@@ -39,9 +39,9 @@ def unpack_batch(batch):
         if exp.last_state is None:
             last_states.append(state)       # the result will be masked anyway
         else:
-            last_states.append(np.array(exp.last_state, copy=False))
-    return np.array(states, copy=False), np.array(actions), np.array(rewards, dtype=np.float32), \
-           np.array(dones, dtype=np.uint8), np.array(last_states, copy=False)
+            last_states.append(np.asarray(exp.last_state))
+    return np.asarray(states), np.array(actions), np.array(rewards, dtype=np.float32), \
+           np.array(dones, dtype=np.uint8), np.asarray(last_states)
 
 
 
