@@ -8,7 +8,7 @@ from gymnasium import Wrapper
 import torch
 import torch.optim as optim
 from tensorboardX import SummaryWriter
-from ..lib import dqn_model, common
+from lib import dqn_model, common
 
 
 # 测试多少次游戏轮数
@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     # 创建游戏环境
     env = gym.make("MountainCar-v0")
-    env = CustomEndConditionWrapper(env)
+    # env = CustomEndConditionWrapper(env)
 
     writer = SummaryWriter(comment="-mountain-car-ptan-n-steps")
     net = dqn_model.DQNMountainCar(env.observation_space.shape, env.action_space.n).to(device)
@@ -61,12 +61,13 @@ if __name__ == "__main__":
     agent = ptan.agent.DQNAgent(net, selector, device=device)
     
     exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=0.99, steps_count=REWARD_STEPS_DEFAULT)
-    buffer = ptan.experience.ExperienceReplayBuffer(exp_source, buffer_size=100000)
+    buffer = ptan.experience.ExperienceReplayBuffer(exp_source, buffer_size=10**5)
 
-    optimizer = optim.Adam(net.parameters(), lr=1e-4)
+    optimizer = optim.Adam(net.parameters(), lr=5e-4)
     frame_idx = 0
+    best_loss = 100
 
-    with common.RewardTracker(writer, stop_reward=-150) as reward_tracker:
+    with common.RewardTracker(writer, stop_reward=-50) as reward_tracker:
         while True:
             frame_idx += 1
             buffer.populate(1)
@@ -88,5 +89,5 @@ if __name__ == "__main__":
 
             if frame_idx % 1000 == 0:
                 tgt_net.sync()
-            if frame_idx % 10000 == 0:
-                torch.save(net.state_dict(), "../model_data/mountain_car_dqn_n_steps.pth")
+                best_loss = common.save_model("mountain_car_dqn_n_steps", loss_v, best_loss, net)
+                common.save_model("mountain_car_tgt_dqn_n_steps", loss_v, best_loss, net)
