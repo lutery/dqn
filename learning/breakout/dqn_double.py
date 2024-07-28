@@ -42,7 +42,7 @@ def calc_loss(batch, net, tgt_net, gamma, device="cpu", double=True):
         # 通过以上步骤，就实现了通过两个DQN网络，计算出下一个状态的最大Q值
     else:
         next_state_values = tgt_net(next_states_v).max(1)[0]
-    next_state_values[done_mask] = 0.0
+    next_state_values[done_mask.bool()] = 0.0
 
     expected_state_action_values = next_state_values.detach() * gamma + rewards_v
     return nn.MSELoss()(state_action_values, expected_state_action_values)

@@ -122,7 +122,7 @@ def calc_loss(batch, batch_weights, net, tgt_net, gamma, device="cpu"):
 
     state_action_values = net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
     next_state_values = tgt_net(next_states_v).max(1)[0]
-    next_state_values[done_mask] = 0.0
+    next_state_values[done_mask.bool()] = 0.0
 
     expected_state_action_values = next_state_values.detach() * gamma + rewards_v
     # 权重值大的，这里计算后会放大误差，权重值小的则缩小误差，使最新的样本（误差越大的样本）能够快速参与改变网路而不受就样本的干扰，提高拟合 的速度
