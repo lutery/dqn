@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-
+未验证
 '''
 import gymnasium as gym
 import ptan
@@ -11,7 +11,7 @@ import torch.optim as optim
 
 from tensorboardX import SummaryWriter
 
-from learning.lib import dqn_model, common
+from lib import dqn_model, common
 
 REWARD_STEPS_DEFAULT = 2
 
@@ -46,6 +46,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(net.parameters(), lr=2.5e-4)
 
     frame_idx = 0
+    best_loss = 100
 
     with common.RewardTracker(writer, 500) as reward_tracker:
         while True:
@@ -86,3 +87,5 @@ if __name__ == "__main__":
             # 如果当前的轮次已经达到了同步到目标网络的轮次，则进行目标网络的同步更新
             if frame_idx % 5000 == 0:
                 tgt_net.sync()
+                best_loss = common.save_model("n_steps_dqn", loss_v.item(), best_loss, net.state_dict())
+                common.save_model("n_steps_dqn_tgt", loss_v.item(), best_loss, tgt_net.target_model.state_dict())
