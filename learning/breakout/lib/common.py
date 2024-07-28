@@ -31,7 +31,7 @@ def unpack_batch(batch):
     # return 将states, actions, rewards, dones, last_states各个list转换为numpy
     states, actions, rewards, dones, last_states = [], [], [], [], []
     for exp in batch:
-        state = np.array(exp.state, copy=False)
+        state = np.asarray(exp.state)
         states.append(state)
         actions.append(exp.action)
         rewards.append(exp.reward)
