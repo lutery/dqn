@@ -162,7 +162,7 @@ if __name__ == "__main__":
     net = dqn_model.DQNBreakOut(env.observation_space.shape, env.action_space.n).to(device)
     tgt_net = ptan.agent.TargetNet(net)
     selector = ptan.actions.EpsilonGreedyActionSelector(epsilon=params['epsilon_start'])
-    epsilon_tracker = common.EpsilonTracker(selector, params)
+    epsilon_tracker = common.EpsilonTracker(selector, params['epsilon_start'], params['epsilon_final'], params['epsilon_frames'])
     agent = ptan.agent.DQNAgent(net, selector, device=device)
 
     exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=params['gamma'], steps_count=1)
