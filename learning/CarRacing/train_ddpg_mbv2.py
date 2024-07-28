@@ -63,6 +63,21 @@ def test_net(net, env, count=10, device="cpu"):
     return rewards / count, steps / count
 
 
+import copy
+import multiprocessing
+
+def test_process_func(net_state_dict, env, frame_idx, device, result_queue):
+    net = model.DDPGActorMBv2(env.observation_space.shape, env.action_space.shape[0]).to(device)
+    net.load_state_dict(net_state_dict)
+    
+    ts = time.time()
+    rewards, steps = test_net(net, env, device=device)
+    print("Test done in %.2f sec, reward %.3f, steps %d" % (
+        time.time() - ts, rewards, steps))
+    
+    result_queue.put((frame_idx, rewards, steps))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cuda", default=True, action='store_true', help='Enable CUDA')
@@ -70,7 +85,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join("saves", "ddpg-" + args.name)
+    save_path = os.path.join("saves", "ddpg-mbv2-" + args.name)
     os.makedirs(save_path, exist_ok=True)
 
     env = TransposeObservation(gym.make(ENV_ID, domain_randomize=True, continuous=True))
@@ -84,19 +99,19 @@ if __name__ == "__main__":
     print(f"act_net Number of parameters: {common.count_parameters(act_net)}")
     print(f"crt_net Number of parameters: {common.count_parameters(crt_net)}")
 
-    if (os.path.exists(os.path.join(save_path, "act-0.pth"))):
-        act_net.load_state_dict(torch.load(os.path.join(save_path, "act-0.pth")))
+    if (os.path.exists(os.path.join(save_path, "act-mbv2-0.pth"))):
+        act_net.load_state_dict(torch.load(os.path.join(save_path, "act-mbv2-0.pth")))
         print("加载act模型成功")
 
-    if (os.path.exists(os.path.join(save_path, "crt-0.pth"))):
-        crt_net.load_state_dict(torch.load(os.path.join(save_path, "crt-0.pth")))
+    if (os.path.exists(os.path.join(save_path, "crt-mbv2-0.pth"))):
+        crt_net.load_state_dict(torch.load(os.path.join(save_path, "crt-mbv2-0.pth")))
         print("加载crt模型成功")
     # 对于直接输出Q值网络，需要构建一个稳定的目标，因为Q值网络是会根据历史数据进行更新
     # 所以不能马上更新目标网络，为了稳定，否则会因为部分不稳定的数据（偶发的高分或者低分影响）
     tgt_act_net = ptan.agent.TargetNet(act_net)
     tgt_crt_net = ptan.agent.TargetNet(crt_net)
 
-    writer = SummaryWriter(comment="-ddpg_" + args.name)
+    writer = SummaryWriter(comment="-ddpg-mbv2_" + args.name)
     # 构建DDPG代理
     agent = model.AgentDDPG(act_net, device=device)
     exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=GAMMA, steps_count=1)
@@ -106,6 +121,9 @@ if __name__ == "__main__":
 
     frame_idx = 0
     best_reward = None
+    result_queue = multiprocessing.Queue()
+    test_process = None
+
     with ptan.common.utils.RewardTracker(writer) as tracker:
         with ptan.common.utils.TBMeanTracker(writer, batch_size=10) as tb_tracker:
             # start_buffer_time = time.time()
@@ -186,26 +204,52 @@ if __name__ == "__main__":
                 # print(f"Train time: {time.time() - start_train_time}")
 
                 if frame_idx % TEST_ITERS == 0:
-                    # 测试并保存最好测试结果的庶数据
-                    ts = time.time()
-                    rewards, steps = test_net(act_net, test_env, device=device)
-                    print("Test done in %.2f sec, reward %.3f, steps %d" % (
-                        time.time() - ts, rewards, steps))
-                    writer.add_scalar("test_reward", rewards, frame_idx)
-                    writer.add_scalar("test_steps", steps, frame_idx)
+                    # # 测试并保存最好测试结果的庶数据
+                    # ts = time.time()
+                    # rewards, steps = test_net(act_net, test_env, device=device)
+                    # print("Test done in %.2f sec, reward %.3f, steps %d" % (
+                    #     time.time() - ts, rewards, steps))
+                    # writer.add_scalar("test_reward", rewards, frame_idx)
+                    # writer.add_scalar("test_steps", steps, frame_idx)
+                    # if best_reward is None or best_reward < rewards:
+                    #     if best_reward is not None:
+                    #         print("Best reward updated: %.3f -> %.3f" % (best_reward, rewards))
+                    #         name = "best_%+.3f_%d.dat" % (rewards, frame_idx)
+                    #         crt_name = "best_crt_%+.3f_%d.dat" % (rewards, frame_idx)
+                    #         fname = os.path.join(save_path, name)
+                    #         crt_fname = os.path.join(save_path, crt_name)
+                    #         torch.save(act_net.state_dict(), fname)
+                    #         torch.save(crt_net.state_dict(), crt_fname)
+                    #     best_reward = rewards
+                                    #保存act模型和crt模型
+                    torch.save(act_net.state_dict(), os.path.join(save_path, f"act-mbv2-{frame_idx % 10}.pth"))
+                    torch.save(crt_net.state_dict(), os.path.join(save_path, f"crt-mbv2-{frame_idx % 10}.pth"))
+
+                if frame_idx % TEST_ITERS == 0:
+                    # 启动测试进程
+                    if test_process is None or not test_process.is_alive():
+                        net_state_dict = copy.deepcopy(act_net.state_dict())
+                        test_process = multiprocessing.Process(
+                            target=test_process_func,
+                            args=(net_state_dict, test_env, frame_idx, device, result_queue)
+                        )
+                        test_process.start()
+
+                # 检查是否有测试结果
+                if not result_queue.empty():
+                    test_frame_idx, rewards, steps = result_queue.get()
+                    writer.add_scalar("test_reward", rewards, test_frame_idx)
+                    writer.add_scalar("test_steps", steps, test_frame_idx)
                     if best_reward is None or best_reward < rewards:
                         if best_reward is not None:
                             print("Best reward updated: %.3f -> %.3f" % (best_reward, rewards))
-                            name = "best_%+.3f_%d.dat" % (rewards, frame_idx)
-                            crt_name = "best_crt_%+.3f_%d.dat" % (rewards, frame_idx)
+                            name = "best-mbv2_%+.3f_%d.dat" % (rewards, test_frame_idx)
+                            crt_name = "best-mbv2_crt_%+.3f_%d.dat" % (rewards, test_frame_idx)
                             fname = os.path.join(save_path, name)
                             crt_fname = os.path.join(save_path, crt_name)
                             torch.save(act_net.state_dict(), fname)
                             torch.save(crt_net.state_dict(), crt_fname)
                         best_reward = rewards
-                                    #保存act模型和crt模型
-                    torch.save(act_net.state_dict(), os.path.join(save_path, f"act-{frame_idx % 10}.pth"))
-                    torch.save(crt_net.state_dict(), os.path.join(save_path, f"crt-{frame_idx % 10}.pth"))
 
                 # start_buffer_time = time.time()
 
