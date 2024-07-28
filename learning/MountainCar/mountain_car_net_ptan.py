@@ -1,15 +1,14 @@
 '''
+验证未通过
 书中到3万多步奖励才上升
-本代码无法收敛，原因未知，虽然中途出现了奖励-198、-199的情况，但是基本上都是-200
 '''
 import ptan
 import gymnasium as gym
 from gymnasium import Wrapper
 import torch
 import torch.optim as optim
-import torch.nn.functional as F
 from tensorboardX import SummaryWriter
-from lib import dqn_model, common
+from ..lib import dqn_model, common
 
 
 # 测试多少次游戏轮数
@@ -90,4 +89,4 @@ if __name__ == "__main__":
             if frame_idx % 1000 == 0:
                 tgt_net.sync()
             if frame_idx % 10000 == 0:
-                torch.save(net.state_dict(), "./model_data/mountain_car_dqn_n_steps.pth")
+                torch.save(net.state_dict(), "../model_data/mountain_car_dqn_n_steps.pth")
