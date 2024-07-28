@@ -10,7 +10,7 @@ def save_model(model_name, loss, best_loss, model):
         os.makedirs("saves")
 
     if loss < best_loss:
-        torch.save(model, f'saves/best_model_{model_name}.dat')
+        torch.save(model, f'saves/best_model_{model_name}_{best_loss}.dat')
         best_loss = loss
 
     torch.save(model, f'saves/model_{model_name}.dat')
