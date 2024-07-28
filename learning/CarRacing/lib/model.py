@@ -685,3 +685,124 @@ class ModelCriticLinear(nn.Module):
 
     def forward(self, x):
         return self.value(x)
+
+
+class MBv2BaseModel(nn.Module):
+
+    def _make_stage(self, repeat, in_channels, out_channels, stride, t):
+
+        layers = []
+        layers.append(LinearBottleNeck(in_channels, out_channels, stride, t))
+
+        while repeat - 1:
+            layers.append(LinearBottleNeck(out_channels, out_channels, 1, t))
+            repeat -= 1
+
+        return nn.Sequential(*layers)
+
+
+class DDPGActorMBv2(MBv2BaseModel):
+    '''
+    深度确定性策略梯度动作预测网络
+    '''
+    def __init__(self, obs_size, act_size):
+        '''
+        obs_size: 环境的维度
+        act_size: 能够同时执行动作的个数（比如有多个手，不是每个手可以执行哪些动作）
+        '''
+        super(DDPGActorMBv2, self).__init__()
+
+        obs_action = (obs_size[2], obs_size[0], obs_size[1])
+        self.pre = nn.Sequential(
+            nn.Conv2d(obs_action[0], 32, 1, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU6(inplace=True)
+        )
+
+        self.stage1 = LinearBottleNeck(32, 16, 1, 1)
+        self.stage2 = self._make_stage(2, 16, 24, 2, 6)
+        self.stage3 = self._make_stage(3, 24, 32, 2, 6)
+        self.stage4 = self._make_stage(4, 32, 64, 2, 6)
+        self.stage5 = self._make_stage(3, 64, 96, 1, 6)
+        self.stage6 = self._make_stage(3, 96, 160, 1, 6)
+        self.stage7 = LinearBottleNeck(160, 320, 1, 6)
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(320, 1280, 1),
+            nn.BatchNorm2d(1280),
+            nn.ReLU6(inplace=True)
+        )
+
+        self.conv2 = nn.Conv2d(1280, act_size, 1)
+
+    def forward(self, x):
+        fx = x.float() / 256
+        fx = self.pre(fx)
+        fx = self.stage1(fx)
+        fx = self.stage2(fx)
+        fx = self.stage3(fx)
+        fx = self.stage4(fx)
+        fx = self.stage5(fx)
+        fx = self.stage6(fx)
+        fx = self.stage7(fx)
+        fx = self.conv1(fx)
+        fx = F.adaptive_avg_pool2d(fx, 1)
+        fx = self.conv2(fx)
+        fx = fx.view(fx.size(0), -1)
+
+        return fx
+
+
+
+class DDPGCriticMBv2(MBv2BaseModel):
+    '''
+    深度确定性策略梯度网络Q值评价网络
+    '''
+    def __init__(self, obs_size, act_size):
+        '''
+        obs_size: 环境的维度
+        act_size: 能够同时执行动作的个数（比如有多个手，不是每个手可以执行哪些动作）
+        '''
+        super(DDPGCriticMBv2, self).__init__()
+
+        obs_action = (obs_size[2], obs_size[0], obs_size[1])
+        self.pre = nn.Sequential(
+            nn.Conv2d(obs_action[0], 32, 1, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU6(inplace=True)
+        )
+
+        self.stage1 = LinearBottleNeck(32, 16, 1, 1)
+        self.stage2 = self._make_stage(2, 16, 24, 2, 6)
+        self.stage3 = self._make_stage(3, 24, 32, 2, 6)
+        self.stage4 = self._make_stage(4, 32, 64, 2, 6)
+        self.stage5 = self._make_stage(3, 64, 96, 1, 6)
+        self.stage6 = self._make_stage(3, 96, 160, 1, 6)
+        self.stage7 = LinearBottleNeck(160, 320, 1, 6)
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(320, 1280, 1),
+            nn.BatchNorm2d(1280),
+            nn.ReLU6(inplace=True)
+        )
+
+        self.conv2 = nn.Conv2d(1280 + act_size, 1, 1)
+
+
+    def forward(self, x, a):
+        fx = x.float() / 256
+        fx = self.pre(fx)
+        fx = self.stage1(fx)
+        fx = self.stage2(fx)
+        fx = self.stage3(fx)
+        fx = self.stage4(fx)
+        fx = self.stage5(fx)
+        fx = self.stage6(fx)
+        fx = self.stage7(fx)
+        fx = self.conv1(fx)
+        fx = F.adaptive_avg_pool2d(fx, 1)
+        a = a.unsqueeze(-1).unsqueeze(-1)
+        fx = self.conv2(torch.cat((fx, a), dim=1))
+        fx = fx.view(fx.size(0), -1)
+
+        return fx

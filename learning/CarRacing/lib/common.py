@@ -182,3 +182,6 @@ def unpack_batch_acktr(batch, net, last_val_gamma, device="cpu"):
 
     ref_vals_v = torch.FloatTensor(rewards_np).to(device)
     return states_v, actions_v, ref_vals_v
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
