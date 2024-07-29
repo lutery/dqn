@@ -145,7 +145,7 @@ if __name__ == "__main__":
                     continue
 
                 # print(f"Buffer time: {time.time() - start_buffer_time}")
-                print("开始训练")
+                print(f"{frame_idx}: 开始训练")
                 critic_loss_list = []
                 q_mean_list = []
                 actor_loss_list = []
@@ -192,18 +192,18 @@ if __name__ == "__main__":
 
                     actor_loss_list.append(actor_loss_v.item())
 
-                print("训练结束")
+                print(f"{frame_idx}: 训练结束")
                 # 将训练网路同步到目标网络上，但是这里是每次都同步，与之前每隔n步同步一次不同
                 # 这里之所以这样做，是根据测试可知，每次都同步，并使用较小的权重进行同步
                 # 缓存的同步效果更好，并且能够保持平滑的更新
                 tgt_act_net.alpha_sync(alpha=1 - 1e-3)
                 tgt_crt_net.alpha_sync(alpha=1 - 1e-3)
-                print("同步结束")
+                print(f"{frame_idx}: 同步结束")
 
                 tb_tracker.track("loss_critic", np.mean(critic_loss_list), frame_idx)
                 tb_tracker.track("critic_ref", np.mean(q_mean_list), frame_idx)
                 tb_tracker.track("loss_actor", np.mean(actor_loss_list), frame_idx)
-                print("记录结束")
+                print(f"{frame_idx}: 记录结束")
 
                 # print(f"Train time: {time.time() - start_train_time}")
 
@@ -211,7 +211,7 @@ if __name__ == "__main__":
                     #保存act模型和crt模型
                     torch.save(act_net.state_dict(), os.path.join(save_path, f"act-mbv2-{frame_idx % 10}.pth"))
                     torch.save(crt_net.state_dict(), os.path.join(save_path, f"crt-mbv2-{frame_idx % 10}.pth"))
-                    print("模型保存结束")
+                    print(f"{frame_idx}: 模型保存结束")
 
                 if frame_idx % TEST_ITERS == 0:
                     # 启动测试进程
@@ -222,11 +222,11 @@ if __name__ == "__main__":
                             args=(net_state_dict, test_env, frame_idx, device, result_queue)
                         )
                         test_process.start()
-                        print("开始测试")
+                        print(f"{frame_idx}: 开始测试")
 
                 # 检查是否有测试结果
                 if not result_queue.empty():
-                    print("测试结束")
+                    print(f"{frame_idx}: 测试结束")
                     test_frame_idx, rewards, steps = result_queue.get()
                     writer.add_scalar("test_reward", rewards, test_frame_idx)
                     writer.add_scalar("test_steps", steps, test_frame_idx)
@@ -239,9 +239,9 @@ if __name__ == "__main__":
                             crt_fname = os.path.join(save_path, crt_name)
                             torch.save(act_net.state_dict(), fname)
                             torch.save(crt_net.state_dict(), crt_fname)
-                            print("保存最好的模型结束")
+                            print(f"{frame_idx}: 保存最好的模型结束")
                         best_reward = rewards
-                        print(f"记录最好的奖励结束 {best_reward}")
+                        print(f"{frame_idx}: 记录最好的奖励结束 {best_reward}")
                 
                 # start_buffer_time = time.time()
 
