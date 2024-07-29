@@ -86,7 +86,7 @@ if __name__ == "__main__":
     # 根据这两个参数得到训练网络代理器
     tgt_net = ptan.agent.TargetNet(net)
 
-    if (os.path.exists(os.path.join(save_path, " model_double_dqn_tgt.dat"))):
+    if (os.path.exists(os.path.join(save_path, "model_double_dqn_tgt.dat"))):
         tgt_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "model_double_dqn_tgt.dat")))
         print("加载目标网络成功")
         
