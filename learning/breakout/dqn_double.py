@@ -14,6 +14,7 @@ import torch.optim as optim
 from tensorboardX import SummaryWriter
 
 from lib import dqn_model, common
+import os
 
 STATES_TO_EVALUATE = 1000
 EVAL_EVERY_FRAME = 100
@@ -58,6 +59,9 @@ def calc_values_of_states(states, net, device="cpu"):
     return np.mean(mean_vals)
 
 
+save_path = "saves"
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cuda", default=True, action="store_true", help="Enable cuda")
@@ -72,10 +76,20 @@ if __name__ == "__main__":
     writer = SummaryWriter(comment="-" + "dqn-double" + "-double=" + str(args.double))
     net = dqn_model.DQNBreakOut(env.observation_space.shape, env.action_space.n).to(device)
 
+
+    if (os.path.exists(os.path.join(save_path, "model_double_dqn.dat"))):
+        net.load_state_dict(torch.load(os.path.join(save_path, "model_double_dqn.dat")))
+        print("加载模型成功")
+
     # 创建目标网络
     # 创建Epsilon训练动作选择器
     # 根据这两个参数得到训练网络代理器
     tgt_net = ptan.agent.TargetNet(net)
+
+    if (os.path.exists(os.path.join(save_path, " model_double_dqn_tgt.dat"))):
+        tgt_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "model_double_dqn_tgt.dat")))
+        print("加载目标网络成功")
+        
     # epsilon 追踪器，用来跟踪epsilon参数的变化，调整参数
     selector = ptan.actions.EpsilonGreedyActionSelector(epsilon=1.0)
     epsilon_tracker = common.EpsilonTracker(selector, 1.0, 0.1, 10**6)
