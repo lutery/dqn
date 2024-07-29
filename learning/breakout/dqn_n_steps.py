@@ -12,9 +12,11 @@ import torch.optim as optim
 from tensorboardX import SummaryWriter
 
 from lib import dqn_model, common
+import os
 
 REWARD_STEPS_DEFAULT = 2
 
+save_path = "saves"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -31,10 +33,18 @@ if __name__ == "__main__":
     writer = SummaryWriter(comment="-" + "dqn-n-steps" + "-%d-step" % args.n)
     net = dqn_model.DQNBreakOut(env.observation_space.shape, env.action_space.n).to(device)
 
+    if (os.path.exists(os.path.join(save_path, "model_n_steps_dqn.dat"))):
+        net.load_state_dict(torch.load(os.path.join(save_path, "model_n_steps_dqn.dat")))
+        print("加载模型成功")
     # 创建目标网络
     # 创建Epsilon训练动作选择器
     # 根据这两个参数得到训练网络代理器
     tgt_net = ptan.agent.TargetNet(net)
+
+    if (os.path.exists(os.path.join(save_path, "model_n_steps_dqn_tgt.dat"))):
+        tgt_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "model_n_steps_dqn_tgt.dat")))
+        print("加载目标网络成功")
+
     selector = ptan.actions.EpsilonGreedyActionSelector(epsilon=1.0)
     epsilon_tracker = common.EpsilonTracker(selector, 1.0, 0.1, 10**6)
     agent = ptan.agent.DQNAgent(net, selector, device=device)

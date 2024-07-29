@@ -11,6 +11,7 @@ import gymnasium as gym
 import ptan
 import numpy as np
 import argparse
+import os
 
 import torch
 import torch.optim as optim
@@ -135,6 +136,8 @@ def calc_loss(batch, batch_weights, net, tgt_net, gamma, device="cpu"):
     return losses_v.mean(), losses_v + 1e-5
 
 
+save_path = "saves"
+
 if __name__ == "__main__":
     params = {
         'env_name':         "BreakoutNoFrameskip-v4",
@@ -160,7 +163,18 @@ if __name__ == "__main__":
 
     writer = SummaryWriter(comment="-" + params['run_name'] + "-prio-replay")
     net = dqn_model.DQNBreakOut(env.observation_space.shape, env.action_space.n).to(device)
+
+    if (os.path.exists(os.path.join(save_path, "model_prio_replay_dqn.dat"))):
+        net.load_state_dict(torch.load(os.path.join(save_path, "model_prio_replay_dqn.dat")))
+        print("加载模型成功")
+
     tgt_net = ptan.agent.TargetNet(net)
+
+
+    if (os.path.exists(os.path.join(save_path, "model_prio_replay_dqn_tgt.dat"))):
+        tgt_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "model_prio_replay_dqn_tgt.dat")))
+        print("加载目标网络成功")
+
     selector = ptan.actions.EpsilonGreedyActionSelector(epsilon=params['epsilon_start'])
     epsilon_tracker = common.EpsilonTracker(selector, params['epsilon_start'], params['epsilon_final'], params['epsilon_frames'])
     agent = ptan.agent.DQNAgent(net, selector, device=device)
