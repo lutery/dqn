@@ -143,7 +143,7 @@ if __name__ == "__main__":
     save_path = os.path.join("saves", "a2c-" + args.name)
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-    envs = [FireResetEnv(TransposeObservation(gym.make("BreakoutDeterministic-v4", obs_type='rgb', frameskip=4, repeat_action_probability=0.0))) for _ in range(NUM_ENVS)]
+    envs = [FireResetEnv(TransposeObservation(gym.make("ALE/Breakout-v5", obs_type='rgb', frameskip=4, repeat_action_probability=0.0))) for _ in range(NUM_ENVS)]
     writer = SummaryWriter(comment="-a2c_" + args.name)
 
     net = AtariA2C(envs[0].observation_space.shape, envs[0].action_space.n).to(device)
