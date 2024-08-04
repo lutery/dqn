@@ -23,7 +23,7 @@ ENV_ID = "CarRacing-v2"
 GAMMA = 0.99
 BATCH_SIZE = 1024
 MIN_BATCH_SIZE = 16
-LEARNING_RATE = 5e-4
+LEARNING_RATE = 1e-2
 REPLAY_SIZE = 100000 # 重放缓冲区长度，这么长是为了提高稳定性
 REPLAY_INITIAL = 10000 # 重放缓冲区初始化大小
 
