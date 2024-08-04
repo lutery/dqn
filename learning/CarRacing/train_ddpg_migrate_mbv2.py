@@ -81,12 +81,12 @@ if __name__ == "__main__":
     # todo 确认是否需要将模型设置为eval模式
     act_mbv2_net = model.DDPGActorMBv2(env.observation_space.shape, env.action_space.shape[0]).to(device)
     crt_mbv2_net = model.DDPGCriticMBv2(env.observation_space.shape, env.action_space.shape[0]).to(device)
-    if (os.path.exists(os.path.join(save_path, "act-0.pth"))):
-        act_net.load_state_dict(torch.load(os.path.join(save_path, "act-0.pth")))
+    if (os.path.exists(os.path.join(save_path, "best_756.dat"))):
+        act_net.load_state_dict(torch.load(os.path.join(save_path, "best_756.dat")))
         print("加载act模型成功")
 
-    if (os.path.exists(os.path.join(save_path, "crt-0.pth"))):
-        crt_net.load_state_dict(torch.load(os.path.join(save_path, "crt-0.pth")))
+    if (os.path.exists(os.path.join(save_path, "best_crt_756.dat"))):
+        crt_net.load_state_dict(torch.load(os.path.join(save_path, "best_crt_756.dat")))
         print("加载crt模型成功")
 
     if (os.path.exists(os.path.join(save_path, "act-mbv2-0.pth"))):
