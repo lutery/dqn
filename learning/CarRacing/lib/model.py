@@ -413,6 +413,37 @@ class AgentDDPGSimple(ptan.agent.BaseAgent):
         return actions, new_a_states
 
 
+class AgentDirect(ptan.agent.BaseAgent):
+    """
+    Agent implementing Orstein-Uhlenbeck exploration process
+    实现一个具备探索能力的智能体
+    """
+    def __init__(self, net, device="cpu", ):
+
+        self.net = net
+        self.device = device
+
+    def initial_state(self):
+        # 统一接口，但是这里不需要使用，返回None而不是使用pass
+        return None
+
+    def __call__(self, states, agent_states):
+        '''
+        states：当前的环境状态
+        agent_states: 内部智能体的状态,之前的代理器里面这个基本无用,一开始的时候，agent_states是空的，但在这里因为要使用OU过程对执行的动作进行噪音干扰，所以需要使用了智能体的内部状态
+        '''
+        # 将环境转换为目标的数据类型
+        states_v = ptan.agent.float32_preprocessor(states).to(self.device)
+        # 得到执行的动作输出
+        mu_v = self.net(states_v)
+        actions = mu_v.data.cpu().numpy()
+        new_a_states = agent_states
+
+        # 这个步骤 的意思是修正动作值到-1和1之间，否则将导致PyBullet抛出异常
+        actions = np.clip(actions, -1, 1)
+        return actions, new_a_states
+
+
 class AgentDDPG(ptan.agent.BaseAgent):
     """
     Agent implementing Orstein-Uhlenbeck exploration process
