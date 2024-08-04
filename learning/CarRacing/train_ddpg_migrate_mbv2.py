@@ -23,6 +23,7 @@ import torch.nn.functional as F
 ENV_ID = "CarRacing-v2"
 GAMMA = 0.99
 BATCH_SIZE = 1024
+MIN_BATCH_SIZE = 16
 LEARNING_RATE = 1e-4
 REPLAY_SIZE = 100000 # 重放缓冲区长度，这么长是为了提高稳定性
 REPLAY_INITIAL = 10000 # 重放缓冲区初始化大小
@@ -124,36 +125,43 @@ if __name__ == "__main__":
                 if len(buffer) < REPLAY_INITIAL:
                     continue
 
+                critic_loss_list = []
+                actor_loss_list = []
+
                 # 从缓冲区里面采样数据
-                batch = buffer.sample(BATCH_SIZE)
-                states_v, actions_v, rewards_v, dones_mask, last_states_v = common.unpack_batch_ddqn(batch, device)
+                batch_total = buffer.sample(BATCH_SIZE)
+                for i in range(0, BATCH_SIZE, MIN_BATCH_SIZE):
+                    batch = batch_total[i:i+MIN_BATCH_SIZE]
+                    states_v, actions_v, rewards_v, dones_mask, last_states_v = common.unpack_batch_ddqn(batch, device)
 
-                # train critic
-                crt_mbv2_opt.zero_grad()
-                # 根据状态和动作，得到评价，这里是根据实际游戏的状态和动作获取评价
-                with torch.no_grad():
-                    q_v = crt_net(states_v, actions_v)
-                q_mbv2_v = crt_mbv2_net(states_v, actions_v)
-                # 计算预测的当前Q值和Bellman计算的到的Q值之间的差异
-                # 并更新梯度 这里的方式就和之前的Q值单元的一致
-                critic_loss_v = F.mse_loss(q_mbv2_v, q_v)
-                critic_loss_v.backward()
-                crt_mbv2_opt.step()
+                    # train critic
+                    crt_mbv2_opt.zero_grad()
+                    # 根据状态和动作，得到评价，这里是根据实际游戏的状态和动作获取评价
+                    with torch.no_grad():
+                        q_v = crt_net(states_v, actions_v)
+                    q_mbv2_v = crt_mbv2_net(states_v, actions_v)
+                    # 计算预测的当前Q值和Bellman计算的到的Q值之间的差异
+                    # 并更新梯度 这里的方式就和之前的Q值单元的一致
+                    critic_loss_v = F.mse_loss(q_mbv2_v, q_v)
+                    critic_loss_v.backward()
+                    crt_mbv2_opt.step()
+                    critic_loss_list.append(critic_loss_v.item())
 
-                # train actor
-                act_mbv2_opt.zero_grad()
-                # 预测动作
-                with torch.no_grad():
-                    cur_actions_v = act_net(states_v)
-                cur_actions_mbv2_v = act_mbv2_net(states_v)
-                # 根据状态和预测的动作计算Q值的负值
-                # 这里是根据网络预测的动作和实际的状态获取评价
-                # 在评价前取负号，就是简单粗暴的取最小值，从而达到最大值Q值的目的
-                # 由于这里评价网络是固定是，所以最大化Q值，只有更新预测的动作，使得
-                # 评价Q值达到最大值的目的
-                actor_loss_v = F.mse_loss(cur_actions_mbv2_v, cur_actions_v)
-                actor_loss_v.backward()
-                act_mbv2_opt.step()
+                    # train actor
+                    act_mbv2_opt.zero_grad()
+                    # 预测动作
+                    with torch.no_grad():
+                        cur_actions_v = act_net(states_v)
+                    cur_actions_mbv2_v = act_mbv2_net(states_v)
+                    # 根据状态和预测的动作计算Q值的负值
+                    # 这里是根据网络预测的动作和实际的状态获取评价
+                    # 在评价前取负号，就是简单粗暴的取最小值，从而达到最大值Q值的目的
+                    # 由于这里评价网络是固定是，所以最大化Q值，只有更新预测的动作，使得
+                    # 评价Q值达到最大值的目的
+                    actor_loss_v = F.mse_loss(cur_actions_mbv2_v, cur_actions_v)
+                    actor_loss_v.backward()
+                    act_mbv2_opt.step()
+                    actor_loss_list.append(actor_loss_v.item())
 
                 if frame_idx % TEST_ITERS == 0:
                     # 测试并保存最好测试结果的庶数据
@@ -161,7 +169,7 @@ if __name__ == "__main__":
                     rewards, steps = test_net(act_mbv2_net, test_env, device=device)
                     print("Test done in %.2f sec, reward %.3f, steps %d" % (
                         time.time() - ts, rewards, steps))
-                    print(f"Test done and actor_loss_v is {actor_loss_v.item()} and critic_loss_v is {critic_loss_v.item()}")
+                    print(f"Test done and actor_loss_v is {np.mean(actor_loss_list)} and critic_loss_v is {np.mean(critic_loss_list)}")
                     writer.add_scalar("test_reward", rewards, frame_idx)
                     writer.add_scalar("test_steps", steps, frame_idx)
                     if best_reward is None or best_reward < rewards:
