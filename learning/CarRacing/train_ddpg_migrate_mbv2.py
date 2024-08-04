@@ -71,7 +71,6 @@ if __name__ == "__main__":
     device = torch.device("cuda" if args.cuda else "cpu")
 
     save_path = os.path.join("saves", "ddpg-" + args.name)
-    os.makedirs(save_path, exist_ok=True)
 
     env = TransposeObservation(gym.make(ENV_ID, domain_randomize=True, continuous=True))
     test_env = TransposeObservation(gym.make(ENV_ID, continuous=True))
@@ -92,11 +91,11 @@ if __name__ == "__main__":
 
     if (os.path.exists(os.path.join(save_path, "act-mbv2-0.pth"))):
         act_net.load_state_dict(torch.load(os.path.join(save_path, "act-mbv2-0.pth")))
-        print("加载act模型成功")
+        print("加载act-mbv2模型成功")
 
     if (os.path.exists(os.path.join(save_path, "crt-mbv2-0.pth"))):
         crt_net.load_state_dict(torch.load(os.path.join(save_path, "crt-mbv2-0.pth")))
-        print("加载crt模型成功")
+        print("加载crt-mbv2模型成功")
 
     writer = SummaryWriter(comment="-ddpg-migrate-mbv2_" + args.name)
     # 构建DDPG代理
@@ -162,6 +161,7 @@ if __name__ == "__main__":
                     rewards, steps = test_net(act_mbv2_net, test_env, device=device)
                     print("Test done in %.2f sec, reward %.3f, steps %d" % (
                         time.time() - ts, rewards, steps))
+                    print(f"Test done and actor_loss_v is {actor_loss_v.item()} and critic_loss_v is {critic_loss_v.item()}")
                     writer.add_scalar("test_reward", rewards, frame_idx)
                     writer.add_scalar("test_steps", steps, frame_idx)
                     if best_reward is None or best_reward < rewards:
@@ -175,8 +175,8 @@ if __name__ == "__main__":
                             torch.save(crt_mbv2_net.state_dict(), crt_fname)
                         best_reward = rewards
                                     #保存act模型和crt模型
-                    torch.save(act_net.state_dict(), os.path.join(save_path, f"act-mbv2-{frame_idx % 10}.pth"))
-                    torch.save(crt_net.state_dict(), os.path.join(save_path, f"crt-mbv2-{frame_idx % 10}.pth"))
+                    torch.save(act_net.state_dict(), os.path.join(save_path, f"act-mig-mbv2-{frame_idx % 10}.pth"))
+                    torch.save(crt_net.state_dict(), os.path.join(save_path, f"crt-mig-mbv2-{frame_idx % 10}.pth"))
 
 
     pass
