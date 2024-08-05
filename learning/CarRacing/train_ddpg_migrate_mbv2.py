@@ -90,12 +90,12 @@ if __name__ == "__main__":
         crt_net.load_state_dict(torch.load(os.path.join(save_path, "best_crt_756.dat")))
         print("加载crt模型成功")
 
-    if (os.path.exists(os.path.join(save_path, "act-mbv2-0.pth"))):
-        act_net.load_state_dict(torch.load(os.path.join(save_path, "act-mbv2-0.pth")))
+    if (os.path.exists(os.path.join(save_path, "best_migrate_mbv2_+605.423_11000.dat"))):
+        act_mbv2_net.load_state_dict(torch.load(os.path.join(save_path, "best_migrate_mbv2_+605.423_11000.dat")))
         print("加载act-mbv2模型成功")
 
-    if (os.path.exists(os.path.join(save_path, "crt-mbv2-0.pth"))):
-        crt_net.load_state_dict(torch.load(os.path.join(save_path, "crt-mbv2-0.pth")))
+    if (os.path.exists(os.path.join(save_path, "best_migrate_mbv2_crt_+605.423_11000.dat"))):
+        crt_mbv2_net.load_state_dict(torch.load(os.path.join(save_path, "best_migrate_mbv2_crt_+605.423_11000.dat")))
         print("加载crt-mbv2模型成功")
 
     writer = SummaryWriter(comment="-ddpg-migrate-mbv2_" + args.name)
