@@ -2,12 +2,10 @@ from QNetwork import GameNetwork
 from WxJump import WxJump
 from collections import deque
 import numpy as np
-import cv2
 import os
 import random
 import torch
 import torch.nn.functional as F
-import torch.nn.utils as nn_utils
 from tensorboardX import SummaryWriter
 import time
 import traceback
