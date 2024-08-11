@@ -15,6 +15,7 @@ import gymnasium as gym
 import argparse
 from tensorboardX import SummaryWriter
 import numpy as np
+import cv2
 
 from lib import model, common
 
@@ -31,6 +32,44 @@ REPLAY_SIZE = 100000 # 重放缓冲区长度，这么长是为了提高稳定性
 REPLAY_INITIAL = 10000 # 重放缓冲区初始化大小
 
 TEST_ITERS = 1000
+
+
+class PendulumRGBWrapper(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.env = env
+
+        # 修改观察空间为 RGB 图像空间
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(128, 128, 3), dtype=np.uint8)
+
+        self.obs = []
+
+    def _get_rgb_observation(self):
+        # 渲染环境并获取 RGB 图像
+        obs = self.env.render()
+        return cv2.resize(obs, (128, 128))
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        rgb_obs = self._get_rgb_observation()
+        rgb_obs = np.tile(rgb_obs, (1, 1, 4))
+        self.obs = np.copy(rgb_obs)
+        return rgb_obs, info
+
+    def step(self, action):
+        _, reward, terminated, truncated, info = self.env.step(action)
+        rgb_obs = self._get_rgb_observation()
+        rgb_obs = np.concatenate((self.obs[:, :, 3:], rgb_obs), axis=2)
+        return np.copy(rgb_obs), reward, terminated, truncated, info
+
+
+class TransposeObservation(gym.ObservationWrapper):
+    def __init__(self, env=None):
+        super(TransposeObservation, self).__init__(env)
+
+    def observation(self, observation):
+        # 将观察从 (H, W, C) 转换为 (C, H, W)
+        return observation.transpose(2, 0, 1)
 
 
 def test_net(net, env, count=10, device="cpu"):
@@ -58,6 +97,9 @@ def test_net(net, env, count=10, device="cpu"):
     return rewards / count, steps / count
 
 
+def wrapper_env(env):
+    return TransposeObservation(PendulumRGBWrapper(env))
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cuda", default=False, action='store_true', help='Enable CUDA')
@@ -65,15 +107,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join("saves", "td3-" + args.name)
+    save_path = os.path.join("saves", "ddpg-rgb-" + args.name)
     os.makedirs(save_path, exist_ok=True)
 
-    env = gym.make(ENV_ID, g=9.81, render_mode='rgb_array')
-    test_env = gym.make(ENV_ID, g=9.81, render_mode='rgb_array')
+    env = wrapper_env(gym.make(ENV_ID, g=9.81, render_mode='rgb_array'))
+    test_env = wrapper_env(gym.make(ENV_ID, g=9.81, render_mode='rgb_array'))
 
+    obs_shape = (128, 128, 12)
     # 构建动作网络和评价网络
-    act_net = model.DDPGActorRGB(12, env.action_space.shape[0]).to(device)
-    crt_net = model.DDPGCriticRGB(12, env.action_space.shape[0]).to(device)
+    act_net = model.DDPGActorRGB(obs_shape, env.action_space.shape[0]).to(device)
+    crt_net = model.DDPGCriticRGB(obs_shape, env.action_space.shape[0]).to(device)
     print(act_net)
     print(crt_net)
     # 对于直接输出Q值网络，需要构建一个稳定的目标，因为Q值网络是会根据历史数据进行更新
@@ -81,7 +124,7 @@ if __name__ == "__main__":
     tgt_act_net = ptan.agent.TargetNet(act_net)
     tgt_crt_net = ptan.agent.TargetNet(crt_net)
 
-    writer = SummaryWriter(comment="-ddpg_" + args.name)
+    writer = SummaryWriter(comment="-ddpg-rgb" + args.name)
     # 构建DDPG代理
     agent = model.AgentDDPG(act_net, device=device)
     exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=GAMMA, steps_count=1)

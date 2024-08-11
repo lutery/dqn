@@ -216,6 +216,7 @@ class DDPGActorRGB(nn.Module):
         '''
         super(DDPGActorRGB, self).__init__()
 
+        obs_size = (obs_size[2], obs_size[0], obs_size[1])
         self.net = nn.Sequential(
             nn.Conv2d(obs_size[0], 32, kernel_size=8, stride=4),
             nn.BatchNorm2d(32),
@@ -237,7 +238,7 @@ class DDPGActorRGB(nn.Module):
         )
 
     def _get_conv_out(self, shape):
-        o = self.conv(torch.zeros(1, *shape))
+        o = self.net(torch.zeros(1, *shape))
         return int(np.prod(o.size()))
 
     def forward(self, x):
@@ -257,6 +258,7 @@ class DDPGCriticRGB(nn.Module):
         '''
         super(DDPGCriticRGB, self).__init__()
 
+        obs_size = (obs_size[2], obs_size[0], obs_size[1])
         self.net = nn.Sequential(
             nn.Conv2d(obs_size[0], 32, kernel_size=8, stride=4),
             nn.BatchNorm2d(32),
@@ -282,12 +284,12 @@ class DDPGCriticRGB(nn.Module):
         )
 
     def _get_conv_out(self, shape):
-        o = self.conv(torch.zeros(1, *shape))
+        o = self.net(torch.zeros(1, *shape))
         return int(np.prod(o.size()))
 
     def forward(self, x, a):
         fx = x.float() / 256
-        conv_out = self.obs_net(fx).view(fx.size()[0], -1)
+        conv_out = self.net(fx).view(fx.size()[0], -1)
         return self.out_net(torch.cat([conv_out, a], dim=1))
 
 
