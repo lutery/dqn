@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 '''
-todo
-2. 如果未完成进一步考虑如何提高精度以提高平均奖励值
+未验证
+20240811难以训练，需要进一步改进模型
+1. 增加帧合并
 '''
 import gymnasium as gym
 import ptan
@@ -18,6 +19,7 @@ import torch.optim as optim
 
 from typing import Any
 from lib import common
+from collections import deque
 
 GAMMA = 0.99
 LEARNING_RATE = 0.001
@@ -29,6 +31,38 @@ REWARD_STEPS = 4
 CLIP_GRAD = 0.1
 
 SAVE_ITERS = 100
+
+
+class FrameStackWrapper(gym.Wrapper):
+    def __init__(self, env, n_frames=4):
+        super().__init__(env)
+        self.n_frames = n_frames
+        self.frames = deque([], maxlen=n_frames)
+
+        # 假设原始观察空间是一个 Box
+        obs_shape = env.observation_space.shape
+
+        # 修改观察空间以适应堆叠的帧
+        self.observation_space = gym.spaces.Box(
+            low=np.repeat(env.observation_space.low, n_frames, axis=-1),
+            high=np.repeat(env.observation_space.high, n_frames, axis=-1),
+            dtype=env.observation_space.dtype
+        )
+
+    def _get_observation(self):
+        # 将帧堆叠在一起
+        return np.concatenate(list(self.frames), axis=-1)
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        for _ in range(self.n_frames):
+            self.frames.append(obs)
+        return self._get_observation(), info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self.frames.append(obs)
+        return self._get_observation(), reward, terminated, truncated, info
 
 class TransposeObservation(gym.ObservationWrapper):
     def __init__(self, env=None):
@@ -143,7 +177,9 @@ if __name__ == "__main__":
     save_path = os.path.join("saves", "a2c-" + args.name)
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-    envs = [FireResetEnv(TransposeObservation(gym.make("ALE/Breakout-v5", obs_type='rgb', frameskip=4, repeat_action_probability=0.0))) for _ in range(NUM_ENVS)]
+    envs = [FireResetEnv(
+        TransposeObservation(
+            FrameStackWrapper(gym.make("ALE/Breakout-v5", obs_type='rgb', frameskip=4, repeat_action_probability=0.0), n_frames=4))) for _ in range(NUM_ENVS)]
     writer = SummaryWriter(comment="-a2c_" + args.name)
 
     net = AtariA2C(envs[0].observation_space.shape, envs[0].action_space.n).to(device)
