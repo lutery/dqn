@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 '''
-验证貌似不通过，最好的奖励只有-109，得找下代码出错在哪里
-通过实际的验证结果可知，实际上时已经训练成功了，只是这个奖励最高为0，所以当训练到最好的
-结果时，其最好的结果奖励也是负数
-另外实际上执行的动作也要根据实际的游戏进行调整，而不是直接使用clip
-
-最后虽然拿训练好的模型去测试发现是可以完成游戏的，但是貌似这份代码里面的动作预测的范围是-1~1,而游戏的动作范围是-2~2，是否存在问题？
+未验证
 '''
 
 import os
@@ -18,6 +13,7 @@ import numpy as np
 import cv2
 
 from lib import model, common
+from collections import deque
 
 import torch
 import torch.optim as optim
@@ -35,9 +31,11 @@ TEST_ITERS = 1000
 
 
 class PendulumRGBWrapper(gym.Wrapper):
-    def __init__(self, env):
+    def __init__(self, env, n_frames=4):
         super().__init__(env)
         self.env = env
+        self.n_frames = n_frames
+        self.frames = deque([], maxlen=n_frames)
 
         # 修改观察空间为 RGB 图像空间
         self.observation_space = gym.spaces.Box(low=0, high=255, shape=(128, 128, 3), dtype=np.uint8)
@@ -52,15 +50,15 @@ class PendulumRGBWrapper(gym.Wrapper):
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
         rgb_obs = self._get_rgb_observation()
-        rgb_obs = np.tile(rgb_obs, (1, 1, 4))
-        self.obs = np.copy(rgb_obs)
-        return rgb_obs, info
+        for _ in range(self.n_frames):
+            self.frames.append(rgb_obs)
+        return np.concatenate(list(self.frames), axis=-1), info
 
     def step(self, action):
         _, reward, terminated, truncated, info = self.env.step(action)
         rgb_obs = self._get_rgb_observation()
-        rgb_obs = np.concatenate((self.obs[:, :, 3:], rgb_obs), axis=2)
-        return np.copy(rgb_obs), reward, terminated, truncated, info
+        self.frames.append(rgb_obs)
+        return np.concatenate(list(self.frames), axis=-1), reward, terminated, truncated, info
 
 
 class TransposeObservation(gym.ObservationWrapper):
