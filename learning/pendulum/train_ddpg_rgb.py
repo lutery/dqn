@@ -22,7 +22,7 @@ import torch.nn.functional as F
 
 ENV_ID = "Pendulum-v1"
 GAMMA = 0.99
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 LEARNING_RATE = 1e-4
 REPLAY_SIZE = 100000 # 重放缓冲区长度，这么长是为了提高稳定性
 REPLAY_INITIAL = 10000 # 重放缓冲区初始化大小
@@ -100,7 +100,7 @@ def wrapper_env(env):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cuda", default=False, action='store_true', help='Enable CUDA')
+    parser.add_argument("--cuda", default=True, action='store_true', help='Enable CUDA')
     parser.add_argument("-n", "--name", required=True, help="Name of the run")
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
