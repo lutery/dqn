@@ -135,20 +135,139 @@ class SACActor(nn.Module):
 
 
     def evaluate(self, state, device, epsilon=1e-6):
+        '''
+
+        :param state:
+        :param device:
+        :param epsilon:
+        :return: 执行的动作，动作的对数概率，动作噪声（动作的采样），动作均值，动作的对数标准差
+        '''
+
         state_v = state
+        # 得到预测动作的均值和对数方差
         mean, log_std = self(state_v)
+        # 得到标准差
         std = torch.exp(log_std)
+        # 创建一个标准正态分布
         normal = dist.Normal(0, 1)
+        # 从标准正态分布中采样和mean一样的维度的动作噪声
         z = normal.sample(mean.shape).to(device)
+        # todo tanh是为了将动作限制在-1和1之间
+        # mean + std * z在数学上的作用是将从标准正太分布转换为均值为mean，标准差为std的分布
+        # 所以这里是将从标准正太分布中采样的动作噪声转换为预测的动作分布
+        # 为什么不直接构建一个均值为mean，标准差为std的正态分布呢？
+        # 您提出了一个非常好的问题。这种方法被称为"重参数化技巧"（Reparameterization Trick），是现代深度强化学习和变分推断中的一个关键技术。让我详细解释为什么我们使用这种方法：
+        #
+        #
+        #
+        # ```python
+        # import torch
+        # import torch.distributions as dist
+        #
+        # # 方法 1: 直接从指定均值和标准差的分布采样
+        # def direct_sampling(mean, std):
+        #     distribution = dist.Normal(mean, std)
+        #     action = distribution.sample()
+        #     return action
+        #
+        # # 方法 2: 使用重参数化技巧
+        # def reparameterized_sampling(mean, std):
+        #     normal = dist.Normal(0, 1)
+        #     z = normal.sample(mean.shape)
+        #     action = mean + std * z
+        #     return action
+        #
+        # # 示例使用
+        # mean = torch.tensor([0.5, -0.5])
+        # std = torch.tensor([0.1, 0.2])
+        #
+        # action1 = direct_sampling(mean, std)
+        # action2 = reparameterized_sampling(mean, std)
+        #
+        # print("Direct sampling:", action1)
+        # print("Reparameterized sampling:", action2)
+        #
+        # # 梯度计算示例
+        # mean.requires_grad_(True)
+        # std.requires_grad_(True)
+        #
+        # action_reparam = reparameterized_sampling(mean, std)
+        # loss = action_reparam.sum()
+        # loss.backward()
+        #
+        # print("Gradient of mean:", mean.grad)
+        # print("Gradient of std:", std.grad)
+        #
+        # ```
+        #
+        # 现在，让我解释为什么我们使用重参数化技巧，而不是直接采样：
+        #
+        # 1. 梯度传播：
+        #    - 直接采样：如果我们直接从 N(mean, std) 采样，采样操作会阻断梯度的反向传播。这是因为采样操作本身不是可微的。
+        #    - 重参数化：通过将随机性分离到独立的标准正态分布中，我们创建了一个可微的路径从输出（action）到输入参数（mean 和 std）。
+        #
+        # 2. 降低方差：
+        #    - 重参数化技巧通常会产生较低方差的梯度估计，这有助于更稳定的训练过程。
+        #
+        # 3. 可控的随机性：
+        #    - 通过分离随机性（z）和确定性部分（mean 和 std），我们可以更好地控制探索过程。
+        #
+        # 4. 数学等价性：
+        #    - 从数学上讲，`mean + std * z`（其中 z ~ N(0, 1)）等价于从 N(mean, std^2) 直接采样。但前者允许梯度流动。
+        #
+        # 5. 便于优化：
+        #    - 在训练过程中，我们可以直接优化 mean 和 std，而不是试图优化一个完整的分布。
+        #
+        # 6. 适用于更复杂的分布：
+        #    - 这种技巧可以扩展到更复杂的分布，不仅限于高斯分布。
+        #
+        # 7. 一致性：
+        #    - 在评估和推理时，我们可以通过设置 z = 0 来获得确定性的行为，这与训练时的随机行为保持一致。
+        #
+        # 8. 计算效率：
+        #    - 在某些情况下，重参数化可能比直接从复杂分布采样更高效。
+        #
+        # 9. 便于实现高级技巧：
+        #    - 例如，在SAC中，我们可以很容易地在采样后应用 tanh 函数来约束动作范围。
+        #
+        # 实际影响：
+        # - 训练稳定性：使用重参数化技巧通常会导致更稳定的训练过程。
+        # - 学习效率：通常可以更快地学习到有效的策略。
+        # - 探索-利用平衡：提供了一种自然的方式来平衡探索和利用。
+        #
+        # 在SAC中的应用：
+        # 在SAC算法中，重参数化技巧不仅用于生成动作，还用于计算策略的熵。这使得算法能够同时优化期望回报和策略熵，从而实现高效的探索和鲁棒的学习。
+        #
+        # 总结：
+        # 重参数化技巧是一个强大的工具，它允许我们在保持随机性的同时，使得采样过程可微分。这在基于梯度的优化方法（如深度强化学习中的策略梯度方法）中特别有用。它解决了直接从参数化分布采样时梯度无法流动的问题，使得端到端的训练成为可能。
         action = torch.tanh(mean + std * z)
         # action = action * self.action_range
+        # 动作的对数概率 以下计算包含三个部分：
+        # dist.Normal(mean, std).log_prob(mean + std * z)
+        # 计算原始高斯分布的对数概率，也可以理解为高斯分布下的动作概率
+        # 构建一个均值为mean，标准差为std的高斯分布，然后计算mean + std * z的对数概率（动作概率）
+        # 也就是对之前采样得到的动作z进行概率计算
+        # torch.log(1. - action ** 2 + epsilon)
+        # tanh 变换导致的概率密度变化的修正，由于预测的动作经过了tanh函数的变换，概率分布出现了变化，所以需要
+        # 进行修正，这里的epsilon是为了数值稳定性，数学知识：雅可比行列式
+        # torch.log(self.action_range_tensor)
+        # 根据论文原文是对动作的范围进行修正，标准化不同的动作范围的动作概率
         log_prob = dist.Normal(mean, std).log_prob(mean + std * z) - torch.log(1. - action ** 2 + epsilon) - torch.log(self.action_range_tensor)
+        # 这里是将预测的动作每一个维度的概率求和，得到一个综合的动作概率，因为在预测是，会对动作的每一个维度的概率进行预测
         log_prob = log_prob.sum(dim=1).unsqueeze(1)
 
         return action, log_prob, z, mean, log_std
 
 
     def get_action(self, state, device, greedy=False):
+        '''
+        该方法主要用于采样阶段
+        :param state:
+        :param device:
+        :param greedy:
+        :return:
+        '''
+
         # 与TD3的不同点，对于获取的动作探索
         # 采用的均值和方差的计算方式
         state_v = state
