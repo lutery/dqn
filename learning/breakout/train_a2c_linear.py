@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 '''
-未验证
+已验证
 20240811难以训练，需要进一步改进模型
 1. 增加帧合并
+
+20240817 增加了四帧合并后，效果和之前基本一样，没有明显提升，也是基本到30分左右就不再提升了
 '''
 import gymnasium as gym
 import ptan
@@ -163,7 +165,7 @@ def unpack_batch(batch, net, device='cpu'):
         last_vals_np = last_vals_v.data.cpu().numpy()[:, 0]
         rewards_np[not_done_idx] += GAMMA ** REWARD_STEPS * last_vals_np
 
-    ref_vals_v = torch.FloatTensor(rewards_np).to(device)
+    ref_vals_v = torch.FloatTensor(rewards_np).to(device)   
     return states_v, actions_t, ref_vals_v
 
 
