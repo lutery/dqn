@@ -140,7 +140,7 @@ def calc_loss(batch, net, tgt_net, gamma, device="cpu", save_prefix=None):
 
     # 得到下一个状态预测到的执行动作的Q值概率分布
     next_best_distr = next_distr[range(batch_size), next_actions]
-    dones = dones.astype(np.bool)
+    dones = dones.astype(np.bool_)
 
     # project our distribution using Bellman update
     # 利用预测的最好的概率分布，结合实际的激励，计算出下一个状态的概率分布
