@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 '''
 python .\train_ddpg_simple.py -n caracing
+验证未通过
 '''
 
 import os

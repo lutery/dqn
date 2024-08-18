@@ -140,7 +140,6 @@ if __name__ == "__main__":
         sac.act_net.load_state_dict(checkpoint["act_net"])
         sac.crt1_net.load_state_dict(checkpoint["crt1_net"])
         sac.crt2_net.load_state_dict(checkpoint["crt2_net"])
-        sac.target_act_net.target_model.load_state_dict(checkpoint["target_act_net"])
         sac.target_crt1_net.target_model.load_state_dict(checkpoint["target_crt1_net"])
         sac.target_crt2_net.target_model.load_state_dict(checkpoint["target_crt2_net"])
         agent.step = checkpoint["step"]
@@ -178,6 +177,7 @@ if __name__ == "__main__":
                 # 使用目标动作预测网路，根据下一个状态预测执行的动作
                 pred_act, pred_log_prob, _, _, _= sac.act_net.evaluate(last_states_v, device)
                 # 使用目标评测网络，根据下一个状态和下一个状态将要执行的动作得到下一个状态的评价Q值
+                # 这里符合SAC网络的计算公式 todo 理解为什么要sac.alpha * pred_log_prob
                 q_last_v = torch.min(sac.target_crt1_net.target_model(last_states_v, pred_act), sac.target_crt2_net.target_model(last_states_v, pred_act)) - sac.alpha * pred_log_prob
                 # 如果是结束状态则将奖励置为0
                 q_last_v[dones_mask.bool()] = 0.0

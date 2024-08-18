@@ -1,21 +1,19 @@
+import os.path
 import time
 import numpy as np
 import sys
 import torch
 import torch.nn as nn
-import os
-import ptan
 
-
-def save_model(model_name, loss, best_loss, model):
-    if not os.path.exists("saves"):
-        os.makedirs("saves")
+def save_model(model_name, loss, best_loss, model, save_path):
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
 
     if loss < best_loss:
-        torch.save(model, f'saves/best_model_{model_name}.dat')
+        torch.save(model, f'{save_path}/best_{best_loss}_{model_name}')
         best_loss = loss
 
-    torch.save(model, f'saves/model_{model_name}.dat')
+    torch.save(model, f'{save_path}/{model_name}')
 
     return best_loss
 
@@ -33,7 +31,7 @@ def unpack_batch(batch):
     # return 将states, actions, rewards, dones, last_states各个list转换为numpy
     states, actions, rewards, dones, last_states = [], [], [], [], []
     for exp in batch:
-        state = np.array(exp.state, copy=False)
+        state = np.asarray(exp.state)
         states.append(state)
         actions.append(exp.action)
         rewards.append(exp.reward)
@@ -41,9 +39,9 @@ def unpack_batch(batch):
         if exp.last_state is None:
             last_states.append(state)       # the result will be masked anyway
         else:
-            last_states.append(np.array(exp.last_state, copy=False))
-    return np.array(states, copy=False), np.array(actions), np.array(rewards, dtype=np.float32), \
-           np.array(dones, dtype=np.uint8), np.array(last_states, copy=False)
+            last_states.append(np.asarray(exp.last_state))
+    return np.asarray(states), np.array(actions), np.array(rewards, dtype=np.float32), \
+           np.array(dones, dtype=np.uint8), np.asarray(last_states)
 
 
 
@@ -157,29 +155,73 @@ class RewardTracker:
             return True
         return False
 
+def distr_projection(next_distr, rewards, dones, Vmin, Vmax, n_atoms, gamma):
+    """
+    Perform distribution projection aka Catergorical Algorithm from the
+    "A Distributional Perspective on RL" paper
+    这里就是通过人工的方式得到一个更加合理的概率分布坐标，然后通过kl散步，得到原始坐标分布和
+    投影坐标分布之间的差值作为损失函数，进行优化拟合神经网络
 
-def unpack_batch_ddqn(batch, device="cpu"):
-    '''
-    解压深度确定性策略梯度网络的数据
-    '''
-    # states: 环境状态
-    # actions: 执行的动作
-    # rewards： 执行动作后获取的奖励
-    # dones: 执行动作后游戏是否结束
-    # last_states: 未结束的游戏，执行动作后的达到的状态（针对多步展开，则是展开的最后一个动作）；如果是游戏已经结束的状态，则保存的还是和states中一样的状态，如果不是游戏结束的状态，则保存执行动作后的下一个状态
-    states, actions, rewards, dones, last_states = [], [], [], [], []
-    for exp in batch:
-        states.append(exp.state)
-        actions.append(exp.action)
-        rewards.append(exp.reward)
-        dones.append(exp.last_state is None)
-        if exp.last_state is None:
-            last_states.append(exp.state)
-        else:
-            last_states.append(exp.last_state)
-    states_v = ptan.agent.float32_preprocessor(states).to(device)
-    actions_v = ptan.agent.float32_preprocessor(actions).to(device)
-    rewards_v = ptan.agent.float32_preprocessor(rewards).to(device)
-    last_states_v = ptan.agent.float32_preprocessor(last_states).to(device)
-    dones_t = torch.ByteTensor(dones).to(device)
-    return states_v, actions_v, rewards_v, dones_t, last_states_v
+    param next_distr: 下一个状态最大Q值执行动作的概率分布
+    param rewards: 每次执行动作获取的激励
+    param dones: 游戏是否结束
+    param Vmin:
+    param Vmax:
+    param n_atoms: 分布的范围
+    param gama:
+
+    """
+    batch_size = len(rewards)
+    # 创建保存投影结果的数组
+    proj_distr = np.zeros((batch_size, n_atoms), dtype=np.float32)
+    delta_z = (Vmax - Vmin) / (n_atoms - 1) # 计算投影坐标之间的间隔
+    for atom in range(n_atoms):
+        # 计算激励在（todo 不确定 分布坐标系里面的位置），并保证计算的结果不会越界
+        # 计算的公式 pos= 当前的激励 +（坐标最小值 + 当前的坐标位置 * 每个坐标之间的间隔）* 遗忘参数
+        # tz_j: 计算当前激励在当前的坐标下偏移的位置
+        tz_j = np.minimum(Vmax, np.maximum(Vmin, rewards + (Vmin + atom * delta_z) * gamma))
+        # 但是实际上在表示时，实际索引是从0开始的，所以这里计算的是以0为起点时的索引坐标
+        # 如果激励是0，那么投影的坐标是在原点上，如果激励是其他值，那么投影的坐标将偏移出
+        # 原点
+        # 这里是要找出投影的坐标在原点上的位置动作激励
+        b_j = (tz_j - Vmin) / delta_z
+        l = np.floor(b_j).astype(np.int64)
+        u = np.ceil(b_j).astype(np.int64)
+        eq_mask = u == l
+        # 如果偏移的坐标正好在原点上，则直接将当前的Q值的对用的分布坐标值累计到proj_distr中
+        # l[eq_mask]表示reward落在坐标点上的坐标索引，将这些Q值分布值累加在proj_distr
+        # 而l[ne_mask]同理，表示落在原点之间的值该如何累加分布到两个原点上
+        # 这里实际上就是在计算源坐标到目标的投影坐标并将值累加进去
+        proj_distr[eq_mask, l[eq_mask]] += next_distr[eq_mask, atom]
+        ne_mask = u != l
+        # 如果偏移坐标落在两个原点之间，那么就需要按照线性插值算法一样，根据距离两个
+        # 原点的距离值分配Q值到两个原点上
+        proj_distr[ne_mask, l[ne_mask]] += next_distr[ne_mask, atom] * (u - b_j)[ne_mask]
+        proj_distr[ne_mask, u[ne_mask]] += next_distr[ne_mask, atom] * (b_j - l)[ne_mask]
+    if dones.any():
+        # 如果存在已经结束的点值，那么将已经结束的索引位置的概率分布值全部设置为0
+        proj_distr[dones] = 0.0
+        # 然后在根据激励值计算在概率分布上的坐标位置
+        # 通常情况下，正激励表示整理，负激励表示失败
+        # 所以这里正激励正好落在坐标上，负激励则不在坐标上
+        tz_j = np.minimum(Vmax, np.maximum(Vmin, rewards[dones]))
+        b_j = (tz_j - Vmin) / delta_z
+        l = np.floor(b_j).astype(np.int64)
+        u = np.ceil(b_j).astype(np.int64)
+        # 这边也依旧是找到结束激励正好坐落在概率分布坐标位置上的索引
+        eq_mask = u == l
+        # 通过深拷贝，得到一个哪些结束激励正好在概率分布坐标位置上的索引bool列表
+        eq_dones = dones.copy()
+        eq_dones[dones] = eq_mask
+        # 如果存在正好在坐标位置上的索引，则说明该游戏是正结束（也就是胜利）
+        if eq_dones.any():
+            proj_distr[eq_dones, l[eq_mask]] = 1.0
+        # 得到结束概率分布不在坐标位置上的索引位置
+        ne_mask = u != l
+        ne_dones = dones.copy()
+        ne_dones[dones] = ne_mask
+        if ne_dones.any():
+            # 这边应该就是计算，游戏结束时，不在概率分布坐标索引位置上的激励的投影坐标
+            proj_distr[ne_dones, l[ne_mask]] = (u - b_j)[ne_mask]
+            proj_distr[ne_dones, u[ne_mask]] = (b_j - l)[ne_mask]
+    return proj_distr
