@@ -4,6 +4,7 @@ import sys
 import torch
 import torch.nn as nn
 import os
+import ptan
 
 
 def save_model(model_name, loss, best_loss, model):
@@ -155,3 +156,30 @@ class RewardTracker:
             print("Solved in %d frames!" % frame)
             return True
         return False
+
+
+def unpack_batch_ddqn(batch, device="cpu"):
+    '''
+    解压深度确定性策略梯度网络的数据
+    '''
+    # states: 环境状态
+    # actions: 执行的动作
+    # rewards： 执行动作后获取的奖励
+    # dones: 执行动作后游戏是否结束
+    # last_states: 未结束的游戏，执行动作后的达到的状态（针对多步展开，则是展开的最后一个动作）；如果是游戏已经结束的状态，则保存的还是和states中一样的状态，如果不是游戏结束的状态，则保存执行动作后的下一个状态
+    states, actions, rewards, dones, last_states = [], [], [], [], []
+    for exp in batch:
+        states.append(exp.state)
+        actions.append(exp.action)
+        rewards.append(exp.reward)
+        dones.append(exp.last_state is None)
+        if exp.last_state is None:
+            last_states.append(exp.state)
+        else:
+            last_states.append(exp.last_state)
+    states_v = ptan.agent.float32_preprocessor(states).to(device)
+    actions_v = ptan.agent.float32_preprocessor(actions).to(device)
+    rewards_v = ptan.agent.float32_preprocessor(rewards).to(device)
+    last_states_v = ptan.agent.float32_preprocessor(last_states).to(device)
+    dones_t = torch.ByteTensor(dones).to(device)
+    return states_v, actions_v, rewards_v, dones_t, last_states_v
