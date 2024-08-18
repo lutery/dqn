@@ -81,6 +81,8 @@ if __name__ == "__main__":
     # todo 确认是否需要将模型设置为eval模式
     act_mbv2_net = model.DDPGActorMBv2(env.observation_space.shape, env.action_space.shape[0]).to(device)
     crt_mbv2_net = model.DDPGCriticMBv2(env.observation_space.shape, env.action_space.shape[0]).to(device)
+    tgt_act_mbv2_net = ptan.agent.TargetNet(act_mbv2_net)
+    tgt_crt_mbv2_net = ptan.agent.TargetNet(crt_mbv2_net)
     if (os.path.exists(os.path.join(save_path, "best_756.dat"))):
         act_net.load_state_dict(torch.load(os.path.join(save_path, "best_756.dat")))
         print("加载act模型成功")
@@ -97,9 +99,17 @@ if __name__ == "__main__":
         crt_mbv2_net.load_state_dict(torch.load(os.path.join(save_path, "crt-distillation_mbv2.dat")))
         print("加载crt-mbv2模型成功")
 
+    if (os.path.exists(os.path.join(save_path, "act-distillation-mbv2-tgt.dat"))):
+        tgt_act_mbv2_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "act-distillation-mbv2-tgt.dat")))
+        print("加载tgt_act-mbv2模型成功")
+
+    if (os.path.exists(os.path.join(save_path, "crt-distillation-mbv2-tgt.dat"))):
+        tgt_crt_mbv2_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "crt-distillation-mbv2-tgt.dat")))
+        print("加载tgt_crt-mbv2模型成功")
+
     writer = SummaryWriter(comment="-ddpg-distillation-" + args.name)
     # 构建DDPG代理
-    agent = model.AgentDDPG(act_net, device=device)
+    agent = model.AgentDDPG(act_mbv2_net, device=device)
     exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=GAMMA, steps_count=1)
     buffer = ptan.experience.ExperienceReplayBuffer(exp_source, buffer_size=REPLAY_SIZE)
     act_mbv2_opt = optim.Adam(act_mbv2_net.parameters(), lr=LEARNING_RATE)
@@ -137,14 +147,28 @@ if __name__ == "__main__":
                     crt_mbv2_opt.zero_grad()
                     # 根据状态和动作，得到评价，这里是根据实际游戏的状态和动作获取评价
                     with torch.no_grad():
-                        q_v = crt_net(states_v, actions_v)
+                        q_v_best = crt_net(states_v, actions_v)
                     q_mbv2_v = crt_mbv2_net(states_v, actions_v)
                     # 计算预测的当前Q值和Bellman计算的到的Q值之间的差异
                     # 并更新梯度 这里的方式就和之前的Q值单元的一致
-                    critic_loss_v = F.mse_loss(q_mbv2_v, q_v)
-                    critic_loss_v.backward()
+                    critic_best_loss_v = F.mse_loss(q_mbv2_v, q_v_best)
+
+                    last_act_v = tgt_act_mbv2_net.target_model(last_states_v)
+                    # 使用目标评测网络，根据下一个状态和下一个状态将要执行的动作得到下一个状态的评价Q值
+                    q_last_v = tgt_crt_mbv2_net.target_model(last_states_v, last_act_v)
+                    # 如果是结束状态则将奖励置为0
+                    q_last_v[dones_mask.bool()] = 0.0
+                    # 计算Q值 bellman公式
+                    q_ref_v = rewards_v.unsqueeze(dim=-1) + q_last_v * GAMMA
+                    # 计算预测的当前Q值和Bellman计算的到的Q值之间的差异
+                    # 并更新梯度 这里的方式就和之前的Q值单元的一致
+                    critic_loss_v = F.mse_loss(q_mbv2_v, q_ref_v.detach())
+
+                    total_crt_loss_v = 0.3 * critic_best_loss_v + 0.7 * critic_loss_v
+
+                    total_crt_loss_v.backward()
                     crt_mbv2_opt.step()
-                    critic_loss_list.append(critic_loss_v.item())
+                    critic_loss_list.append(total_crt_loss_v.item())
 
                     # train actor
                     act_mbv2_opt.zero_grad()
@@ -157,10 +181,15 @@ if __name__ == "__main__":
                     # 在评价前取负号，就是简单粗暴的取最小值，从而达到最大值Q值的目的
                     # 由于这里评价网络是固定是，所以最大化Q值，只有更新预测的动作，使得
                     # 评价Q值达到最大值的目的
-                    actor_loss_v = F.mse_loss(cur_actions_mbv2_v, cur_actions_v)
-                    actor_loss_v.backward()
+                    actor_best_loss_v = F.mse_loss(cur_actions_mbv2_v, cur_actions_v)
+
+                    actor_loss_v = -crt_mbv2_net(states_v, cur_actions_mbv2_v)
+                    actor_loss_v = actor_loss_v.mean()
+
+                    total_actor_loss_v = 0.3 * actor_best_loss_v + 0.7 * actor_loss_v
+                    total_actor_loss_v.backward()
                     act_mbv2_opt.step()
-                    actor_loss_list.append(actor_loss_v.item())
+                    actor_loss_list.append(total_actor_loss_v.item())
 
                 if frame_idx % TEST_ITERS == 0:
                     # 测试并保存最好测试结果的庶数据
@@ -182,8 +211,10 @@ if __name__ == "__main__":
                             torch.save(crt_mbv2_net.state_dict(), crt_fname)
                         best_reward = rewards
                                     #保存act模型和crt模型
-                    torch.save(act_net.state_dict(), os.path.join(save_path, f"act-mig-mbv2-{frame_idx % 10}.pth"))
-                    torch.save(crt_net.state_dict(), os.path.join(save_path, f"crt-mig-mbv2-{frame_idx % 10}.pth"))
+                    torch.save(act_mbv2_net.state_dict(), os.path.join(save_path, f"act-distillation-mbv2.dat"))
+                    torch.save(crt_mbv2_net.state_dict(), os.path.join(save_path, f"crt-distillation_mbv2.dat"))
+                    torch.save(tgt_act_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"act-distillation-mbv2-tgt.dat"))
+                    torch.save(tgt_crt_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"crt-distillation-mbv2-tgt.dat"))
 
 
     pass
