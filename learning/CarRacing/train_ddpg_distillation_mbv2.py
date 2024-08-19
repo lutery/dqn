@@ -80,6 +80,7 @@ def test_process_func(net_state_dict, env, frame_idx, device, result_queue):
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
     parser.add_argument("--cuda", default=True, action='store_true', help='Enable CUDA')
     parser.add_argument("-n", "--name", required=True, help="Name of the run")
