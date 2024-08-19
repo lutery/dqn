@@ -69,6 +69,7 @@ import copy
 import multiprocessing
 
 def test_process_func(net_state_dict, env, frame_idx, device, result_queue):
+    print("Start Test")
     net = model.DDPGActorMBv2(env.observation_space.shape, env.action_space.shape[0]).to(device)
     net.load_state_dict(net_state_dict)
     
