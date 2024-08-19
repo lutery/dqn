@@ -160,7 +160,6 @@ if __name__ == "__main__":
                 actor_loss_list = []
 
                 # 从缓冲区里面采样数据
-                print("Start training...")
 
                 batch_total = buffer.sample(BATCH_SIZE)
                 for i in range(0, BATCH_SIZE, MIN_BATCH_SIZE):
