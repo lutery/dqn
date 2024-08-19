@@ -27,7 +27,8 @@ LEARNING_RATE = 1e-4
 REPLAY_SIZE = 100000 # 重放缓冲区长度，这么长是为了提高稳定性
 REPLAY_INITIAL = 10000 # 重放缓冲区初始化大小
 
-TEST_ITERS = 1000
+SAVE_ITERS = 10
+TEST_ITERS = 100
 
 class TransposeObservation(gym.ObservationWrapper):
     def __init__(self, env=None):
@@ -159,7 +160,6 @@ if __name__ == "__main__":
                 actor_loss_list = []
 
                 # 从缓冲区里面采样数据
-                start_train_time = time.time()
                 print("Start training...")
 
                 batch_total = buffer.sample(BATCH_SIZE)
@@ -226,7 +226,12 @@ if __name__ == "__main__":
                 tb_tracker.track("critic_ref", np.mean(q_mean_list), frame_idx)
                 tb_tracker.track("loss_actor", np.mean(actor_loss_list), frame_idx)
 
-                print(f"Train time: {time.time() - start_train_time}")
+                if frame_idx % SAVE_ITERS == 0:
+                    print(f"Train done and actor_loss_v is {np.mean(actor_loss_list)} and critic_loss_v is {np.mean(critic_loss_list)}")
+                    torch.save(act_mbv2_net.state_dict(), os.path.join(save_path, f"act-distillation-mbv2.dat"))
+                    torch.save(crt_mbv2_net.state_dict(), os.path.join(save_path, f"crt-distillation_mbv2.dat"))
+                    torch.save(tgt_act_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"act-distillation-mbv2-tgt.dat"))
+                    torch.save(tgt_crt_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"crt-distillation-mbv2-tgt.dat"))
 
                 if frame_idx % TEST_ITERS == 0:
                     # 测试并保存最好测试结果的庶数据
@@ -238,11 +243,7 @@ if __name__ == "__main__":
                             args=(net_state_dict, test_env, frame_idx, device, result_queue)
                         )
                         test_process.start()
-                    print(f"Test done and actor_loss_v is {np.mean(actor_loss_list)} and critic_loss_v is {np.mean(critic_loss_list)}")
-                    torch.save(act_mbv2_net.state_dict(), os.path.join(save_path, f"act-distillation-mbv2.dat"))
-                    torch.save(crt_mbv2_net.state_dict(), os.path.join(save_path, f"crt-distillation_mbv2.dat"))
-                    torch.save(tgt_act_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"act-distillation-mbv2-tgt.dat"))
-                    torch.save(tgt_crt_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"crt-distillation-mbv2-tgt.dat"))
+                    
 
                 # 检查是否有测试结果
                 if not result_queue.empty():
