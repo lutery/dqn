@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-未验证:通过条件：200步以内达到山顶
+验证通过:通过条件：200步以内达到山顶
 python train_d4pg.py -n mountaincar
 '''
 import os
