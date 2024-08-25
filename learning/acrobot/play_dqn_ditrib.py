@@ -1,3 +1,5 @@
+'''
+'''
 import os
 import gymnasium as gym
 import torch
@@ -105,7 +107,7 @@ def play_acrobot():
 
     while not done:
         state_v = torch.tensor(state).float().unsqueeze(0).to(device)
-        q_vals = net(state_v)
+        q_vals = net.qvals(state_v)
         _, act_v = torch.max(q_vals, dim=1)
         action = int(act_v.item())
 
