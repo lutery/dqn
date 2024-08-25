@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-未验证
+验证通过，可以达到奖励值-100以内，并且步数小于100步，不过可能由于训练时间较短，所以效果比不上dqn_basic
 '''
 import gymnasium as gym
 import ptan
