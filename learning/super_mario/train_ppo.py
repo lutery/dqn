@@ -2,6 +2,19 @@
 '''
 未验证
 1. 了解离散动作下的PPO
+
+出现错误：
+NaN or Inf found in input tensor.
+Traceback (most recent call last):
+  File "/home/lutery/projects/python/my_-nqd/learning/super_mario/train_ppo.py", line 183, in <module>
+    for step_idx, exp in enumerate(exp_source):
+  File "/home/lutery/anaconda3/envs/pytorch-gym/lib/python3.10/site-packages/ptan-0.8-py3.10.egg/ptan/experience.py", line 127, in __iter__
+  File "/home/lutery/anaconda3/envs/pytorch-gym/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/lutery/anaconda3/envs/pytorch-gym/lib/python3.10/site-packages/ptan-0.8-py3.10.egg/ptan/agent.py", line 163, in __call__
+  File "/home/lutery/anaconda3/envs/pytorch-gym/lib/python3.10/site-packages/ptan-0.8-py3.10.egg/ptan/actions.py", line 64, in __call__
+  File "numpy/random/mtrand.pyx", line 971, in numpy.random.mtrand.RandomState.choice
+ValueError: probabilities contain NaN
 '''
 import os
 import math
