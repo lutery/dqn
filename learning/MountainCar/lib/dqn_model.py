@@ -2,6 +2,26 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+class DQN(nn.Module):
+    def __init__(self, obs_size, n_actions):
+        '''
+        param input_shape: 输入的状态形状，网路接受输入的shape形如(channel, width, height)
+        param n_actions: 输出的所要执行的动作得到的激励，对于gym来说即action_space的在当前状态下得到的激励值
+        '''
+
+        super(DQN, self).__init__()
+
+        self.conv = nn.Sequential(
+            nn.Linear(obs_size, 400),
+            nn.ReLU(),
+            nn.Linear(400, 300),
+            nn.ReLU(),
+            nn.Linear(300, n_actions)
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
 class DQNMountainCar(nn.Module):
     def __init__(self, input_shape, n_actions):
         '''

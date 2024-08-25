@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-未适配
+
 '''
 import gymnasium as gym
 import ptan
@@ -12,13 +12,34 @@ import torch.optim as optim
 from tensorboardX import SummaryWriter
 
 from lib import dqn_model, common
-import os
 
 REWARD_STEPS_DEFAULT = 2
 
-save_path = "saves"
+HYPERPARAMS = {
+    'pong': {
+        'env_name':         "MountainCar-v0",
+        'stop_reward':      -110.0,
+        'run_name':         'MountainCar',
+        'replay_size':      100000,
+        'replay_initial':   10000,
+        'target_net_sync':  1000,
+        'epsilon_frames':   10**5,
+        'epsilon_start':    1.0,
+        'epsilon_final':    0.02,
+        'learning_rate':    0.0001,
+        'gamma':            0.99,
+        'batch_size':       32
+    }
+}
+
+import os
+save_path = "saves/dqn_n_steps"
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
 
 if __name__ == "__main__":
+    # 获取PONG游戏的参数
+    params = HYPERPARAMS['pong']
     parser = argparse.ArgumentParser()
     parser.add_argument("--cuda", default=True, action="store_true", help="Enable cuda")
     parser.add_argument("-n", default=REWARD_STEPS_DEFAULT, type=int, help="Count of steps to unroll Bellman")
@@ -26,39 +47,37 @@ if __name__ == "__main__":
     device = torch.device("cuda" if args.cuda else "cpu")
 
     # 创建游戏环境
-    env = gym.make("BreakoutNoFrameskip-v4")
-    env = ptan.common.wrappers.wrap_dqn(env)
+    env = gym.make(params['env_name'])
+    # env = ptan.common.wrappers.wrap_dqn(env)
 
     # 创建训练网络
-    writer = SummaryWriter(comment="-" + "dqn-n-steps" + "-%d-step" % args.n)
-    net = dqn_model.DQNBreakOut(env.observation_space.shape, env.action_space.n).to(device)
+    writer = SummaryWriter(comment="-" + params['run_name'] + "-%d-step" % args.n)
+    net = dqn_model.DQN(env.observation_space.shape[0], env.action_space.n).to(device)
 
-    if (os.path.exists(os.path.join(save_path, "model_n_steps_dqn.dat"))):
-        net.load_state_dict(torch.load(os.path.join(save_path, "model_n_steps_dqn.dat")))
-        print("加载模型成功")
     # 创建目标网络
     # 创建Epsilon训练动作选择器
     # 根据这两个参数得到训练网络代理器
     tgt_net = ptan.agent.TargetNet(net)
+    if (os.path.exists(os.path.join(save_path, "net.pth"))):
+        net.load_state_dict(torch.load(os.path.join(save_path, "net.pth")))
+        print("加载模型成功")
 
-    if (os.path.exists(os.path.join(save_path, "model_n_steps_dqn_tgt.dat"))):
-        tgt_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "model_n_steps_dqn_tgt.dat")))
-        print("加载目标网络成功")
-
-    selector = ptan.actions.EpsilonGreedyActionSelector(epsilon=1.0)
-    epsilon_tracker = common.EpsilonTracker(selector, 1.0, 0.1, 10**6)
+    if (os.path.exists(os.path.join(save_path, "tgt_net.pth"))):
+        tgt_net.model.load_state_dict(torch.load(os.path.join(save_path, "tgt_net.pth")))
+        print("加载目标模型成功")
+    selector = ptan.actions.EpsilonGreedyActionSelector(epsilon=params['epsilon_start'])
+    epsilon_tracker = common.EpsilonTracker(selector, params['epsilon_start'], params['epsilon_final'], params['epsilon_frames'])
     agent = ptan.agent.DQNAgent(net, selector, device=device)
 
     # 创建经验重放缓冲区
-    exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=0.99, steps_count=args.n)
-    buffer = ptan.experience.ExperienceReplayBuffer(exp_source, buffer_size=10**6)
+    exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=params['gamma'], steps_count=args.n)
+    buffer = ptan.experience.ExperienceReplayBuffer(exp_source, buffer_size=params['replay_size'])
     # 创建神经网络优化器
-    optimizer = optim.Adam(net.parameters(), lr=2.5e-4)
+    optimizer = optim.Adam(net.parameters(), lr=params['learning_rate'])
 
     frame_idx = 0
-    best_loss = 100
 
-    with common.RewardTracker(writer, 500) as reward_tracker:
+    with common.RewardTracker(writer, params['stop_reward']) as reward_tracker:
         while True:
             frame_idx += 1
             # 从经验池中获取一次样本存放在缓存中
@@ -78,24 +97,26 @@ if __name__ == "__main__":
 
             # 如果训练缓存中的训练数据未达到目标的缓存大小，则需要继续进行缓存采集直到达到指定的数量后
             # 再开始训练，
-            if len(buffer) < 50000:
+            if len(buffer) < params['replay_initial']:
                 continue
 
             # 清空优化器的梯度
             optimizer.zero_grad()
             # 从经验缓冲区中采集batch_size大小的样本
-            batch = buffer.sample(64)
+            batch = buffer.sample(params['batch_size'])
             # 计算损失值并更新神经网路
             # 根据网络上的资料显示，这里之所以仅做了n次方，是因为容许误差，所以就省略了中间
             # 步骤的max操作，直接做了n次方，这样做的好处是可以减少计算量，但同时也限制了n步的大小
             # 这里计算的损失对应书中第120页
             loss_v = common.calc_loss_dqn(batch, net, tgt_net.target_model,
-                                          gamma=0.99**args.n, device=device)
+                                          gamma=params['gamma']**args.n, device=device)
             loss_v.backward()
             optimizer.step()
 
             # 如果当前的轮次已经达到了同步到目标网络的轮次，则进行目标网络的同步更新
-            if frame_idx % 5000 == 0:
+            if frame_idx % params['target_net_sync'] == 0:
                 tgt_net.sync()
-                best_loss = common.save_model("n_steps_dqn", loss_v.item(), best_loss, net.state_dict())
-                common.save_model("n_steps_dqn_tgt", loss_v.item(), best_loss, tgt_net.target_model.state_dict())
+
+            if frame_idx % 10000 == 0:
+                torch.save(net.state_dict(), os.path.join(save_path, "net.pth"))
+                torch.save(tgt_net.model.state_dict(), os.path.join(save_path, "tgt_net.pth"))
