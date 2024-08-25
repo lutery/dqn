@@ -27,7 +27,8 @@ LEARNING_RATE = 1e-4
 REPLAY_SIZE = 100000 # 重放缓冲区长度，这么长是为了提高稳定性
 REPLAY_INITIAL = 10000 # 重放缓冲区初始化大小
 
-TEST_ITERS = 1000
+SAVE_ITERS = 10
+TEST_ITERS = 100
 
 class TransposeObservation(gym.ObservationWrapper):
     def __init__(self, env=None):
@@ -63,7 +64,25 @@ def test_net(net, env, count=10, device="cpu"):
     return rewards / count, steps / count
 
 
+
+import copy
+import multiprocessing
+
+def test_process_func(net_state_dict, env, frame_idx, device, result_queue):
+    print("Start Test")
+    net = model.DDPGActorMBv2(env.observation_space.shape, env.action_space.shape[0]).to(device)
+    net.load_state_dict(net_state_dict)
+    
+    ts = time.time()
+    rewards, steps = test_net(net, env, device=device)
+    print("Test done in %.2f sec, reward %.3f, steps %d" % (
+        time.time() - ts, rewards, steps))
+    
+    result_queue.put((frame_idx, rewards, steps))
+
+
 if __name__ == "__main__":
+    multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
     parser.add_argument("--cuda", default=True, action='store_true', help='Enable CUDA')
     parser.add_argument("-n", "--name", required=True, help="Name of the run")
@@ -117,6 +136,9 @@ if __name__ == "__main__":
 
     frame_idx = 0
     best_reward = None
+    result_queue = multiprocessing.Queue()
+    test_process = None
+
     with ptan.common.utils.RewardTracker(writer) as tracker:
         with ptan.common.utils.TBMeanTracker(writer, batch_size=10) as tb_tracker:
             while True:
@@ -135,9 +157,11 @@ if __name__ == "__main__":
                     continue
 
                 critic_loss_list = []
+                q_mean_list = []
                 actor_loss_list = []
 
                 # 从缓冲区里面采样数据
+
                 batch_total = buffer.sample(BATCH_SIZE)
                 for i in range(0, BATCH_SIZE, MIN_BATCH_SIZE):
                     batch = batch_total[i:i+MIN_BATCH_SIZE]
@@ -169,6 +193,7 @@ if __name__ == "__main__":
                     total_crt_loss_v.backward()
                     crt_mbv2_opt.step()
                     critic_loss_list.append(total_crt_loss_v.item())
+                    q_mean_list.append(q_ref_v.mean().item())
 
                     # train actor
                     act_mbv2_opt.zero_grad()
@@ -191,15 +216,40 @@ if __name__ == "__main__":
                     act_mbv2_opt.step()
                     actor_loss_list.append(total_actor_loss_v.item())
 
+                # 将训练网路同步到目标网络上，但是这里是每次都同步，与之前每隔n步同步一次不同
+                # 这里之所以这样做，是根据测试可知，每次都同步，并使用较小的权重进行同步
+                # 缓存的同步效果更好，并且能够保持平滑的更新
+                tgt_act_mbv2_net.alpha_sync(alpha=1 - 1e-3)
+                tgt_crt_mbv2_net.alpha_sync(alpha=1 - 1e-3)
+
+                tb_tracker.track("loss_critic", np.mean(critic_loss_list), frame_idx)
+                tb_tracker.track("critic_ref", np.mean(q_mean_list), frame_idx)
+                tb_tracker.track("loss_actor", np.mean(actor_loss_list), frame_idx)
+
+                if frame_idx % SAVE_ITERS == 0:
+                    print(f"Train done and actor_loss_v is {np.mean(actor_loss_list)} and critic_loss_v is {np.mean(critic_loss_list)}")
+                    torch.save(act_mbv2_net.state_dict(), os.path.join(save_path, f"act-distillation-mbv2.dat"))
+                    torch.save(crt_mbv2_net.state_dict(), os.path.join(save_path, f"crt-distillation_mbv2.dat"))
+                    torch.save(tgt_act_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"act-distillation-mbv2-tgt.dat"))
+                    torch.save(tgt_crt_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"crt-distillation-mbv2-tgt.dat"))
+
                 if frame_idx % TEST_ITERS == 0:
                     # 测试并保存最好测试结果的庶数据
-                    ts = time.time()
-                    rewards, steps = test_net(act_mbv2_net, test_env, device=device)
-                    print("Test done in %.2f sec, reward %.3f, steps %d" % (
-                        time.time() - ts, rewards, steps))
-                    print(f"Test done and actor_loss_v is {np.mean(actor_loss_list)} and critic_loss_v is {np.mean(critic_loss_list)}")
-                    writer.add_scalar("test_reward", rewards, frame_idx)
-                    writer.add_scalar("test_steps", steps, frame_idx)
+                    # 启动测试进程
+                    if test_process is None or not test_process.is_alive():
+                        net_state_dict = copy.deepcopy(act_mbv2_net.state_dict())
+                        test_process = multiprocessing.Process(
+                            target=test_process_func,
+                            args=(net_state_dict, test_env, frame_idx, device, result_queue)
+                        )
+                        test_process.start()
+                    
+
+                # 检查是否有测试结果
+                if not result_queue.empty():
+                    test_frame_idx, rewards, steps = result_queue.get()
+                    writer.add_scalar("test_reward", rewards, test_frame_idx)
+                    writer.add_scalar("test_steps", steps, test_frame_idx)
                     if best_reward is None or best_reward < rewards:
                         if best_reward is not None:
                             print("Best reward updated: %.3f -> %.3f" % (best_reward, rewards))
@@ -210,11 +260,5 @@ if __name__ == "__main__":
                             torch.save(act_mbv2_net.state_dict(), fname)
                             torch.save(crt_mbv2_net.state_dict(), crt_fname)
                         best_reward = rewards
-                                    #保存act模型和crt模型
-                    torch.save(act_mbv2_net.state_dict(), os.path.join(save_path, f"act-distillation-mbv2.dat"))
-                    torch.save(crt_mbv2_net.state_dict(), os.path.join(save_path, f"crt-distillation_mbv2.dat"))
-                    torch.save(tgt_act_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"act-distillation-mbv2-tgt.dat"))
-                    torch.save(tgt_crt_mbv2_net.target_model.state_dict(), os.path.join(save_path, f"crt-distillation-mbv2-tgt.dat"))
-
 
     pass
