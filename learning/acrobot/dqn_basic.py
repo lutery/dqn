@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-未验证
+验证通过，可以再比较少的步数是的自由端达到目标高度，奖励值达到-100以内
 '''
 import os
 import gymnasium as gym
