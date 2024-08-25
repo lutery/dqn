@@ -1,6 +1,5 @@
 '''
 未验证
-书中到3万多步奖励才上升
 '''
 import gymnasium as gym
 from gymnasium import spaces, Wrapper

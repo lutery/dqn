@@ -32,6 +32,10 @@ HYPERPARAMS = {
     }
 }
 
+import os
+save_path = "saves/dqn_n_steps"
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
 
 if __name__ == "__main__":
     # 获取PONG游戏的参数
@@ -54,6 +58,13 @@ if __name__ == "__main__":
     # 创建Epsilon训练动作选择器
     # 根据这两个参数得到训练网络代理器
     tgt_net = ptan.agent.TargetNet(net)
+    if (os.path.exists(os.path.join(save_path, "net.pth"))):
+        net.load_state_dict(torch.load(os.path.join(save_path, "net.pth")))
+        print("加载模型成功")
+
+    if (os.path.exists(os.path.join(save_path, "tgt_net.pth"))):
+        tgt_net.model.load_state_dict(torch.load(os.path.join(save_path, "tgt_net.pth")))
+        print("加载目标模型成功")
     selector = ptan.actions.EpsilonGreedyActionSelector(epsilon=params['epsilon_start'])
     epsilon_tracker = common.EpsilonTracker(selector, params['epsilon_start'], params['epsilon_final'], params['epsilon_frames'])
     agent = ptan.agent.DQNAgent(net, selector, device=device)
@@ -105,3 +116,7 @@ if __name__ == "__main__":
             # 如果当前的轮次已经达到了同步到目标网络的轮次，则进行目标网络的同步更新
             if frame_idx % params['target_net_sync'] == 0:
                 tgt_net.sync()
+
+            if frame_idx % 10000 == 0:
+                torch.save(net.state_dict(), os.path.join(save_path, "net.pth"))
+                torch.save(tgt_net.model.state_dict(), os.path.join(save_path, "tgt_net.pth"))
