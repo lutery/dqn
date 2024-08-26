@@ -118,6 +118,7 @@ def calc_adv_ref(trajectory, net_crt, states_v, device="cpu"):
     for val, next_val, (exp,) in zip(reversed(values[:-1]), reversed(values[1:]),
                                      reversed(trajectory[:-1])):
         if exp.done:
+            print("采集的游戏经验存在结束的状态")
             # 如果游戏的状态是结束的
             delta = exp.reward - val # 计算实际的Q值和预测的Q值的差值
             last_gae = delta # 由于没有后续的动作，那么不考虑之前的优势了
