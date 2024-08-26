@@ -30,6 +30,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
+import deque
 
 # super mario
 import gym_super_mario_bros
@@ -52,6 +53,30 @@ PPO_BATCH_SIZE = 64 # 每次进行轨迹样本计算的batch长度
 
 TEST_ITERS = 100000 # 采样迭代多少次，进行一次游戏测试
 
+class StackFrameWrapper(gym.Wrapper):
+    def __init__(self, env, n_frames=4):
+        super().__init__(env)
+        self.env = env
+        self.n_frames = n_frames
+        self.frames = deque([], maxlen=n_frames)
+
+        self.observation_space = gym.spaces.Box(low=self.env.observation_space.low, high=self.env.observation_space.high, shape=(self.env.observation_space.shape[0], self.env.observation_space.shape[1], n_frames * self.env.observation_space.shape[2]), dtype=np.uint8)
+
+        self.obs = []
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        for _ in range(self.n_frames):
+            self.frames.append(obs)
+        return np.concatenate(list(self.frames), axis=-1), info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self.frames.append(obs)
+        return np.concatenate(list(self.frames), axis=-1), reward, terminated, truncated, info
+
+
+
 class TransposeObservation(gym.ObservationWrapper):
     def __init__(self, env=None):
         super(TransposeObservation, self).__init__(env)
@@ -73,7 +98,7 @@ def make_super_mario_env():
     # set TimeLimit back
     env = TimeLimit(StepAPICompatibility(env, output_truncation_bool=True), max_episode_steps=steps)
 
-    return TransposeObservation(env)
+    return StackFrameWrapper(TransposeObservation(env))
 
 
 def test_net(net, env, count=10, device="cpu"):
