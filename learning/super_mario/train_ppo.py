@@ -49,7 +49,7 @@ LEARNING_RATE_CRITIC = 1e-6
 
 PPO_EPS = 0.2
 PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
-PPO_BATCH_SIZE = 128 # 每次进行轨迹样本计算的batch长度
+PPO_BATCH_SIZE = 64 # 每次进行轨迹样本计算的batch长度
 
 TEST_ITERS = 100000 # 采样迭代多少次，进行一次游戏测试
 
