@@ -70,12 +70,12 @@ class StackFrameWrapper(gym.Wrapper):
         obs, info = self.env.reset(**kwargs)
         for _ in range(self.n_frames):
             self.frames.append(obs)
-        return np.concatenate(list(self.frames), axis=-1), info
+        return np.concatenate(list(self.frames), axis=0), info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         self.frames.append(obs)
-        return np.concatenate(list(self.frames), axis=-1), reward, terminated, truncated, info
+        return np.concatenate(list(self.frames), axis=0), reward, terminated, truncated, info
 
 
 
