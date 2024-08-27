@@ -44,12 +44,12 @@ GAMMA = 0.99
 GAE_LAMBDA = 0.95 # 优势估计器的lambda因子，0.95是一个比较好的值
 
 TRAJECTORY_SIZE = 2049 # todo 作用 看代码好像是采样的轨迹长度（轨迹，也就是连续采样缓存长度，游戏是连续的）
-LEARNING_RATE_ACTOR = 1e-5
-LEARNING_RATE_CRITIC = 1e-5
+LEARNING_RATE_ACTOR = 1e-6
+LEARNING_RATE_CRITIC = 1e-6
 
 PPO_EPS = 0.2
 PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
-PPO_BATCH_SIZE = 64 # 每次进行轨迹样本计算的batch长度
+PPO_BATCH_SIZE = 128 # 每次进行轨迹样本计算的batch长度
 
 TEST_ITERS = 100000 # 采样迭代多少次，进行一次游戏测试
 
