@@ -30,7 +30,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-import deque
+from collections import deque
 
 # super mario
 import gym_super_mario_bros
