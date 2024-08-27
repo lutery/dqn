@@ -44,8 +44,8 @@ GAMMA = 0.99
 GAE_LAMBDA = 0.95 # 优势估计器的lambda因子，0.95是一个比较好的值
 
 TRAJECTORY_SIZE = 2049 # todo 作用 看代码好像是采样的轨迹长度（轨迹，也就是连续采样缓存长度，游戏是连续的）
-LEARNING_RATE_ACTOR = 1e-4
-LEARNING_RATE_CRITIC = 1e-3
+LEARNING_RATE_ACTOR = 1e-5
+LEARNING_RATE_CRITIC = 1e-5
 
 PPO_EPS = 0.2
 PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
@@ -143,6 +143,7 @@ def calc_adv_ref(trajectory, net_crt, states_v, device="cpu"):
     for val, next_val, (exp,) in zip(reversed(values[:-1]), reversed(values[1:]),
                                      reversed(trajectory[:-1])):
         if exp.done:
+            print("采集的游戏经验存在结束的状态")
             # 如果游戏的状态是结束的
             delta = exp.reward - val # 计算实际的Q值和预测的Q值的差值
             last_gae = delta # 由于没有后续的动作，那么不考虑之前的优势了
