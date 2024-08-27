@@ -60,7 +60,9 @@ class StackFrameWrapper(gym.Wrapper):
         self.n_frames = n_frames
         self.frames = deque([], maxlen=n_frames)
 
-        self.observation_space = gym.spaces.Box(low=self.env.observation_space.low, high=self.env.observation_space.high, shape=(self.env.observation_space.shape[0], self.env.observation_space.shape[1], n_frames * self.env.observation_space.shape[2]), dtype=np.uint8)
+        low = np.repeat(self.observation_space.low, n_frames, axis=2)
+        high = np.repeat(self.observation_space.high, n_frames, axis=2)
+        self.observation_space = gym.spaces.Box(low=low, high=high, dtype=self.observation_space.dtype)
 
         self.obs = []
 
