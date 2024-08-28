@@ -50,7 +50,7 @@ LEARNING_RATE_CRITIC = 1e-6
 
 PPO_EPS = 0.2
 PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
-PPO_BATCH_SIZE = 128 # 每次进行轨迹样本计算的batch长度
+PPO_BATCH_SIZE = 64 # 每次进行轨迹样本计算的batch长度
 
 TEST_ITERS = 100000 # 采样迭代多少次，进行一次游戏测试
 
@@ -134,7 +134,8 @@ def calc_adv_ref(trajectory, net_crt, states_v, device="cpu"):
     :param states_v: states tensor 状态张量
     :return: tuple with advantage numpy array and reference values
     """
-    values_v = net_crt(states_v) # 得到预测的Q值
+    with torch.no_grad():
+        values_v = net_crt(states_v) # 得到预测的Q值
     values = values_v.squeeze().data.cpu().numpy()
     # generalized advantage estimator: smoothed version of the advantage
     # 广义优势估计量:优势的平滑版
@@ -258,7 +259,8 @@ if __name__ == "__main__":
             # 计算优势值和实际Q值
             traj_adv_v, traj_ref_v = calc_adv_ref(trajectory, net_crt, traj_states_v, device=device)
             # 根据状态预测动作
-            mu_v = net_act(traj_states_v)
+            with torch.no_grad():
+                mu_v = net_act(traj_states_v)
             # 计算上一轮训练的评价网络、动作网络动作的概率
             old_logprob_v = torch.log(mu_v.gather(1, torch.tensor(traj_actions, dtype=torch.int64).to(device).unsqueeze(-1))).detach()
 
