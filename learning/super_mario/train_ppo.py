@@ -30,6 +30,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
+import torch.nn.utils as nn_utils
 from collections import deque
 
 # super mario
@@ -52,6 +53,8 @@ PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
 PPO_BATCH_SIZE = 128 # 每次进行轨迹样本计算的batch长度
 
 TEST_ITERS = 100000 # 采样迭代多少次，进行一次游戏测试
+
+CLIP_GRAD = 0.5
 
 class StackFrameWrapper(gym.Wrapper):
     def __init__(self, env, n_frames=4):
@@ -311,6 +314,7 @@ if __name__ == "__main__":
                     clipped_surr_v = batch_adv_v * torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)
                     loss_policy_v = -torch.min(surr_obj_v, clipped_surr_v).mean()
                     loss_policy_v.backward()
+                    nn_utils.clip_grad_norm_(net_act.parameters(), CLIP_GRAD)
                     opt_act.step()
 
                     # 记录总损失，用于计算平均损失变化
