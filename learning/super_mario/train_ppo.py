@@ -149,7 +149,6 @@ def calc_adv_ref(trajectory, net_crt, states_v, device="cpu"):
     for val, next_val, (exp,) in zip(reversed(values[:-1]), reversed(values[1:]),
                                      reversed(trajectory[:-1])):
         if exp.done:
-            print("采集的游戏经验存在结束的状态")
             # 如果游戏的状态是结束的
             delta = exp.reward - val # 计算实际的Q值和预测的Q值的差值
             last_gae = delta # 由于没有后续的动作，那么不考虑之前的优势了
@@ -224,6 +223,7 @@ if __name__ == "__main__":
 
     trajectory = [] # 注意，缓冲区更名为轨迹
     best_reward = None
+    grad_index = 0
     with ptan.common.utils.RewardTracker(writer) as tracker:
         for step_idx, exp in enumerate(exp_source):
             rewards_steps = exp_source.pop_rewards_steps()
@@ -299,6 +299,11 @@ if __name__ == "__main__":
                     # actor training
                     opt_act.zero_grad()
                     mu_v = net_act(states_v)
+                    if torch.isnan(mu_v).any() or torch.isinf(mu_v).any():
+                        print(f"Warning: NaN or inf detected in mu_v at step {step_idx}")
+                        torch.save(net_act.state_dict(), os.path.join(save_path, f"nan_inf_detected_act_net_{step_idx}.pth"))
+        
+
                     # 计算预测执行动作的高斯概率
                     indices = actions_v.long().to(device).unsqueeze(-1)
                     logprob_pi_v = torch.log(mu_v.gather(1, indices))
@@ -317,12 +322,34 @@ if __name__ == "__main__":
                     loss_policy_v = -torch.min(surr_obj_v, clipped_surr_v).mean()
                     loss_policy_v.backward()
                     nn_utils.clip_grad_norm_(net_act.parameters(), CLIP_GRAD)
+
+                    grad_max = 0.0
+                    grad_means = 0.0
+                    grad_count = 0
+                    for p in net_act.parameters():
+                        grad_max = max(grad_max, p.grad.abs().max().item())
+                        grad_means += (p.grad ** 2).mean().sqrt().item()
+                        grad_count += 1
+                    writer.add_scalar("grad_l2", grad_means / grad_count, grad_index)
+                    writer.add_scalar("grad_max", grad_max, grad_index)
+
                     opt_act.step()
+
+                    weights_max = 0.0
+                    weights_means = 0.0
+                    weights_count = 0
+                    for p in net_act.parameters():
+                        weights_max = max(weights_max, p.data.abs().max().item())
+                        weights_means += (p.data ** 2).mean().sqrt().item()
+                        weights_count += 1
+                    writer.add_scalar("weights_l2", weights_means / weights_count, grad_index)
+                    writer.add_scalar("weights_max", weights_max, grad_index)
 
                     # 记录总损失，用于计算平均损失变化
                     sum_loss_value += loss_value_v.item()
                     sum_loss_policy += loss_policy_v.item()
                     count_steps += 1
+                    grad_index += 1
 
             trajectory.clear()
             writer.add_scalar("advantage", traj_adv_v.mean().item(), step_idx)
