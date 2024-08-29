@@ -398,23 +398,23 @@ class ModelActor(nn.Module):
         obs_size = (obs_size[2], obs_size[0], obs_size[1])
         self.conv = nn.Sequential(
             nn.Conv2d(obs_size[0], 32, kernel_size=8, stride=4),
-            nn.BatchNorm2d(32),
+            # nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=4, stride=2),
-            nn.BatchNorm2d(64),
+            # nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=3, stride=2),
-            nn.BatchNorm2d(64),
+            # nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.BatchNorm2d(64),
+            # nn.BatchNorm2d(64),
             nn.ReLU()
         )
 
         conv_out_size = self._get_conv_out(obs_size)
         self.fc = nn.Sequential(
             nn.Linear(conv_out_size, 512),
-            nn.ReLU(),
+            # nn.ReLU(),
             nn.Linear(512, act_size),
         )
 
@@ -440,23 +440,23 @@ class ModelCritic(nn.Module):
         obs_size = (obs_size[2], obs_size[0], obs_size[1])
         self.conv = nn.Sequential(
             nn.Conv2d(obs_size[0], 32, kernel_size=8, stride=4),
-            nn.BatchNorm2d(32),
+            # nn.BatchNorm2d(32),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=4, stride=2),
-            nn.BatchNorm2d(64),
+            # nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=3, stride=2),
-            nn.BatchNorm2d(64),
+            # nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.BatchNorm2d(64),
+            # nn.BatchNorm2d(64),
             nn.ReLU()
         )
 
         conv_out_size = self._get_conv_out(obs_size)
         self.fc = nn.Sequential(
             nn.Linear(conv_out_size, 512),
-            nn.ReLU(),
+            # nn.ReLU(),
             nn.Linear(512, 1),
         )
 
