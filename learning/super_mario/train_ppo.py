@@ -292,8 +292,13 @@ if __name__ == "__main__":
                     # 这边就是在计算预测Q值和实际Q值之间的差异损失
                     opt_crt.zero_grad()
                     value_v = net_crt(states_v)
+                    if torch.isnan(value_v).any() or torch.isinf(value_v).any():
+                        print(f"Warning: NaN or inf detected in value_v at step {step_idx}")
+                        torch.save(net_crt.state_dict(), os.path.join(save_path, f"nan_inf_detected_crt_net_{step_idx}.pth"))
+                        raise ValueError("NaN or inf detected in value_v") 
                     loss_value_v = F.mse_loss(value_v.squeeze(-1), batch_ref_v)
                     loss_value_v.backward()
+                    nn_utils.clip_grad_norm_(net_crt.parameters(), CLIP_GRAD)
                     opt_crt.step()
 
                     # actor training
