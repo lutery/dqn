@@ -313,10 +313,12 @@ if __name__ == "__main__":
                     # 计算预测执行动作的高斯概率
                     indices = actions_v.long().to(device).unsqueeze(-1)
                     logprob_pi_v = torch.log(mu_v.gather(1, indices))
+                    writer.add_scalar("logprob_pi_v mean", logprob_pi_v.mean().item(), grad_index)
                     # 计算实时更新的动作预测网络和之前的动作预测网络之间的预测差异比例
                     # 公式P317
                     # 这里使用了exp的除法变换公式（log），所以书中的P317中的在这里是减号
                     ratio_v = torch.exp(logprob_pi_v - batch_old_logprob_v)
+                    writer.add_scalar("ratio_v mean", ratio_v.mean().item(), grad_index)
                     # ratio_v的作用
                     # 用于计算新旧策略之间的比例，这个比例用于计算新旧策略之间的差异
                     # 根据这个差异调整网络的参数，使其能够往更好的方向调整
