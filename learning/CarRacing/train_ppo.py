@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-验证通过
+未验证
 '''
 import os
 import math
