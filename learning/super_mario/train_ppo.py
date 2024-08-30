@@ -346,25 +346,23 @@ if __name__ == "__main__":
                     # torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)对应书中的clip
                     writer.add_scalar("batch_adv_v mean", batch_adv_v.mean().item(), grad_index)
                     writer.add_scalar("batch_adv_v min", batch_adv_v.min().item(), grad_index)
-                    writer.add_scalar("batch_adv_v mean", batch_adv_v.max().item(), grad_index)
+                    writer.add_scalar("batch_adv_v max", batch_adv_v.max().item(), grad_index)
                     surr_obj_v = batch_adv_v * ratio_v
                     writer.add_scalar("surr_obj_v mean", surr_obj_v.mean().item(), grad_index)
                     writer.add_scalar("surr_obj_v min", surr_obj_v.min().item(), grad_index)
-                    writer.add_scalar("surr_obj_v mean", surr_obj_v.max().item(), grad_index)
+                    writer.add_scalar("surr_obj_v max", surr_obj_v.max().item(), grad_index)
 
                     clipped_surr_v = batch_adv_v * torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)
                     writer.add_scalar("clipped_surr_v mean", clipped_surr_v.mean().item(), grad_index)
                     writer.add_scalar("clipped_surr_v min", clipped_surr_v.min().item(), grad_index)
-                    writer.add_scalar("clipped_surr_v mean", clipped_surr_v.max().item(), grad_index)
+                    writer.add_scalar("clipped_surr_v max", clipped_surr_v.max().item(), grad_index)
 
                     writer.add_scalar("torch.clamp mean", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).mean().item(), grad_index)
                     writer.add_scalar("torch.clamp min", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).min().item(), grad_index)
-                    writer.add_scalar("torch.clamp mean", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).max().item(), grad_index)
+                    writer.add_scalar("torch.clamp max", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).max().item(), grad_index)
 
                     loss_policy_v = -torch.min(surr_obj_v, clipped_surr_v).mean()
                     loss_policy_v.backward()
-                    nn_utils.clip_grad_norm_(net_act.parameters(), CLIP_GRAD)
-
                     grad_max = 0.0
                     grad_means = 0.0
                     grad_count = 0
@@ -374,6 +372,17 @@ if __name__ == "__main__":
                         grad_count += 1
                     writer.add_scalar("grad_l2", grad_means / grad_count, grad_index)
                     writer.add_scalar("grad_max", grad_max, grad_index)
+                    nn_utils.clip_grad_norm_(net_act.parameters(), CLIP_GRAD)
+
+                    clip_grad_max = 0.0
+                    clip_grad_means = 0.0
+                    clip_grad_count = 0
+                    for p in net_act.parameters():
+                        clip_grad_max = max(clip_grad_max, p.grad.abs().max().item())
+                        clip_grad_means += (p.grad ** 2).mean().sqrt().item()
+                        clip_grad_count += 1
+                    writer.add_scalar("clip_grad_l2", clip_grad_means / clip_grad_count, grad_index)
+                    writer.add_scalar("clip_grad_max", clip_grad_max, grad_index)
 
                     opt_act.step()
 
