@@ -344,8 +344,23 @@ if __name__ == "__main__":
                     # batch_adv_v对应书中P317中的At
                     # ratio_v对应书中的rt(theta)
                     # torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)对应书中的clip
+                    writer.add_scalar("batch_adv_v mean", batch_adv_v.mean().item(), grad_index)
+                    writer.add_scalar("batch_adv_v min", batch_adv_v.min().item(), grad_index)
+                    writer.add_scalar("batch_adv_v mean", batch_adv_v.max().item(), grad_index)
                     surr_obj_v = batch_adv_v * ratio_v
+                    writer.add_scalar("surr_obj_v mean", surr_obj_v.mean().item(), grad_index)
+                    writer.add_scalar("surr_obj_v min", surr_obj_v.min().item(), grad_index)
+                    writer.add_scalar("surr_obj_v mean", surr_obj_v.max().item(), grad_index)
+
                     clipped_surr_v = batch_adv_v * torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)
+                    writer.add_scalar("clipped_surr_v mean", clipped_surr_v.mean().item(), grad_index)
+                    writer.add_scalar("clipped_surr_v min", clipped_surr_v.min().item(), grad_index)
+                    writer.add_scalar("clipped_surr_v mean", clipped_surr_v.max().item(), grad_index)
+
+                    writer.add_scalar("torch.clamp mean", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).mean().item(), grad_index)
+                    writer.add_scalar("torch.clamp min", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).min().item(), grad_index)
+                    writer.add_scalar("torch.clamp mean", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).max().item(), grad_index)
+
                     loss_policy_v = -torch.min(surr_obj_v, clipped_surr_v).mean()
                     loss_policy_v.backward()
                     nn_utils.clip_grad_norm_(net_act.parameters(), CLIP_GRAD)
