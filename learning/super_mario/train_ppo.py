@@ -323,7 +323,7 @@ if __name__ == "__main__":
                     writer.add_scalar("gathered_zero_count", zero_count, grad_index)
                     writer.add_scalar("gathered_near_zero_count", near_zero_count, grad_index)
                     
-                    logprob_pi_v = torch.log(mu_v.gather(1, indices))
+                    logprob_pi_v = torch.log(mu_v.gather(1, indices) + 1e-7)
                     writer.add_scalar("logprob_pi_v mean", logprob_pi_v.mean().item(), grad_index)
                     # 计算实时更新的动作预测网络和之前的动作预测网络之间的预测差异比例
                     # 公式P317
