@@ -116,7 +116,7 @@ def test_net(net, env, count=10, device="cpu"):
             mu_v = net(obs_v)
             action = mu_v.squeeze(dim=0).data.cpu().argmax().item()
             obs, reward, done, trunc, _ = env.step(action)
-            env.render()
+            # env.render()
             done = done or trunc
             rewards += reward
             steps += 1
@@ -312,6 +312,17 @@ if __name__ == "__main__":
 
                     # 计算预测执行动作的高斯概率
                     indices = actions_v.long().to(device).unsqueeze(-1)
+                    gathered_values = mu_v.gather(1, indices)
+                    min_value = gathered_values.min().item()
+                    max_value = gathered_values.max().item()
+                    zero_count = (gathered_values == 0).sum().item()
+                    near_zero_count = (gathered_values.abs() < 1e-7).sum().item()
+
+                    writer.add_scalar("gathered_min", min_value, grad_index)
+                    writer.add_scalar("gathered_max", max_value, grad_index)
+                    writer.add_scalar("gathered_zero_count", zero_count, grad_index)
+                    writer.add_scalar("gathered_near_zero_count", near_zero_count, grad_index)
+                    
                     logprob_pi_v = torch.log(mu_v.gather(1, indices))
                     writer.add_scalar("logprob_pi_v mean", logprob_pi_v.mean().item(), grad_index)
                     # 计算实时更新的动作预测网络和之前的动作预测网络之间的预测差异比例
