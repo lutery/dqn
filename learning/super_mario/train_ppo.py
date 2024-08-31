@@ -326,6 +326,7 @@ if __name__ == "__main__":
                     logprob_pi_v = torch.log(mu_v.gather(1, indices) + 1e-7)
                     writer.add_scalar("logprob_pi_v mean", logprob_pi_v.mean().item(), grad_index)
                     writer.add_scalar("logprob_pi_v max", logprob_pi_v.max().item(), grad_index)
+                    writer.add_scalar("logprob_pi_v min", logprob_pi_v.min().item(), grad_index)
                     # 计算实时更新的动作预测网络和之前的动作预测网络之间的预测差异比例
                     # 公式P317
                     # 这里使用了exp的除法变换公式（log），所以书中的P317中的在这里是减号
@@ -335,9 +336,17 @@ if __name__ == "__main__":
                     
                     if torch.isnan(batch_old_logprob_v).any() or torch.isinf(batch_old_logprob_v).any():
                         print(f"Warning: NaN or inf detected in batch_old_logprob_v at step {step_idx}")
-                        raise ValueError("NaN or inf detected in batch_old_logprob_v") 
+                        raise ValueError("NaN or inf detected in batch_old_logprob_v")
+                    writer.add_scalar("batch_old_logprob_v mean", batch_old_logprob_v.mean().item(), grad_index)
+                    writer.add_scalar("batch_old_logprob_v max", batch_old_logprob_v.max().item(), grad_index)
+                    writer.add_scalar("batch_old_logprob_v min", batch_old_logprob_v.min().item(), grad_index)
+                    writer.add_scalar("ratio_v_pre mean", (logprob_pi_v - batch_old_logprob_v).mean().item(), grad_index)
+                    writer.add_scalar("ratio_v_pre max", (logprob_pi_v - batch_old_logprob_v).max().item(), grad_index)
+                    writer.add_scalar("ratio_v_pre min", (logprob_pi_v - batch_old_logprob_v).min().item(), grad_index)
                     ratio_v = torch.exp(logprob_pi_v - batch_old_logprob_v)
                     writer.add_scalar("ratio_v mean", ratio_v.mean().item(), grad_index)
+                    writer.add_scalar("ratio_v max", ratio_v.max().item(), grad_index)
+                    writer.add_scalar("ratio_v min", ratio_v.min().item(), grad_index)
                     # ratio_v的作用
                     # 用于计算新旧策略之间的比例，这个比例用于计算新旧策略之间的差异
                     # 根据这个差异调整网络的参数，使其能够往更好的方向调整
