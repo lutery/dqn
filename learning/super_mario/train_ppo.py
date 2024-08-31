@@ -298,7 +298,7 @@ if __name__ == "__main__":
                         raise ValueError("NaN or inf detected in value_v") 
                     loss_value_v = F.mse_loss(value_v.squeeze(-1), batch_ref_v)
                     loss_value_v.backward()
-                    nn_utils.clip_grad_norm_(net_crt.parameters(), CLIP_GRAD)
+                    # nn_utils.clip_grad_norm_(net_crt.parameters(), CLIP_GRAD)
                     opt_crt.step()
 
                     # actor training
