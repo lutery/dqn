@@ -418,6 +418,16 @@ class ModelActor(nn.Module):
             nn.Linear(512, act_size),
         )
 
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.orthogonal_(module.weight, nn.init.calculate_gain('relu'))
+                # nn.init.xavier_uniform_(module.weight)
+                # nn.init.kaiming_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
+
     def _get_conv_out(self, shape):
         o = self.conv(torch.zeros(1, *shape))
         return int(np.prod(o.size()))
@@ -459,6 +469,16 @@ class ModelCritic(nn.Module):
             # nn.ReLU(),
             nn.Linear(512, 1),
         )
+
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                nn.init.orthogonal_(module.weight, nn.init.calculate_gain('relu'))
+                # nn.init.xavier_uniform_(module.weight)
+                # nn.init.kaiming_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
 
     def _get_conv_out(self, shape):
         o = self.conv(torch.zeros(1, *shape))
