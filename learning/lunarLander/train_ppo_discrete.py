@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 '''
 未验证
+训练到中途，发现最终会计算出nan值，有待追踪
 '''
 import os
 import math
