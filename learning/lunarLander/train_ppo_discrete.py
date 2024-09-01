@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
+'''
 未验证
-"""
+'''
 import os
 import math
 import ptan
@@ -18,19 +18,20 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 
-ENV_ID = "LunarLander-v2"
 GAMMA = 0.99
 GAE_LAMBDA = 0.95 # 优势估计器的lambda因子，0.95是一个比较好的值
 
 TRAJECTORY_SIZE = 2049 # todo 作用 看代码好像是采样的轨迹长度（轨迹，也就是连续采样缓存长度，游戏是连续的）
-LEARNING_RATE_ACTOR = 1e-4
-LEARNING_RATE_CRITIC = 1e-3
+LEARNING_RATE_ACTOR = 5e-5
+LEARNING_RATE_CRITIC = 5e-5
 
 PPO_EPS = 0.2
 PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
 PPO_BATCH_SIZE = 64 # 每次进行轨迹样本计算的batch长度
 
 TEST_ITERS = 100000 # 采样迭代多少次，进行一次游戏测试
+
+CLIP_GRAD = 0.5
 
 
 def test_net(net, env, count=10, device="cpu"):
@@ -40,25 +41,16 @@ def test_net(net, env, count=10, device="cpu"):
         obs, _ = env.reset()
         while True:
             obs_v = ptan.agent.float32_preprocessor([obs]).to(device)
-            mu_v = net(obs_v)[0]
-            action = mu_v.squeeze(dim=0).data.cpu().numpy()
-            action = np.clip(action, -1, 1)
+            mu_v = net(obs_v)
+            action = mu_v.squeeze(dim=0).data.cpu().argmax().item()
             obs, reward, done, trunc, _ = env.step(action)
+            # env.render()
             done = done or trunc
             rewards += reward
             steps += 1
             if done:
                 break
     return rewards / count, steps / count
-
-
-def calc_logprob(mu_v, logstd_v, actions_v):
-    """
-    这里依旧采用的是高斯概率分布计算预测的动作概率
-    """
-    p1 = - ((mu_v - actions_v) ** 2) / (2*torch.exp(logstd_v).clamp(min=1e-3))
-    p2 = - torch.log(torch.sqrt(2 * math.pi * torch.exp(logstd_v)))
-    return p1 + p2
 
 
 def calc_adv_ref(trajectory, net_crt, states_v, device="cpu"):
@@ -70,7 +62,8 @@ def calc_adv_ref(trajectory, net_crt, states_v, device="cpu"):
     :param states_v: states tensor 状态张量
     :return: tuple with advantage numpy array and reference values
     """
-    values_v = net_crt(states_v) # 得到预测的Q值
+    with torch.no_grad():
+        values_v = net_crt(states_v) # 得到预测的Q值
     values = values_v.squeeze().data.cpu().numpy()
     # generalized advantage estimator: smoothed version of the advantage
     # 广义优势估计量:优势的平滑版
@@ -107,42 +100,62 @@ def calc_adv_ref(trajectory, net_crt, states_v, device="cpu"):
     ref_v = torch.FloatTensor(list(reversed(result_ref))).to(device)
     return adv_v, ref_v
 
+def ppo_states_preprocessor(states):
+    """
+    Convert list of states into the form suitable for model. By default we assume Variable
+    :param states: list of numpy arrays with states
+    :return: Variable
+    这个预处理器的方法就是将list转换为矩阵的形式
+    如果state是一维的，那么就将其转换为[1, D]的形式
+    如果state是多维的，那么就将其转换为[N, E, D]的形式
+    """
+    if len(states) == 1:
+        np_states = np.expand_dims(states[0], 0)
+    else:
+        np_states = np.array([np.array(s, copy=False) for s in states], copy=False)
+    return torch.tensor(np_states.copy())
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cuda", default=True, action='store_true', help='Enable CUDA')
     parser.add_argument("-n", "--name", required=True, help="Name of the run")
-    parser.add_argument("-e", "--env", default=ENV_ID, help="Environment id, default=" + ENV_ID)
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join("saves", "ppo-" + args.name)
+    save_path = os.path.join("saves", "ppo-discrete-" + args.name)
     os.makedirs(save_path, exist_ok=True)
 
     env = gym.make(
         "LunarLander-v2",
-        continuous=True,
-        gravity=-10.0,
-        enable_wind=False,
-        wind_power=15.0,
-        turbulence_power=1.5)
+        continuous = False,
+        gravity = -10.0,
+        enable_wind = False,
+        wind_power = 15.0,
+        turbulence_power = 1.5)
     test_env = gym.make(
         "LunarLander-v2",
-        continuous=True,
-        gravity=-10.0,
-        enable_wind=False,
-        wind_power=15.0,
-        turbulence_power=1.5)
+        continuous = False,
+        gravity = -10.0,
+        enable_wind = False,
+        wind_power = 15.0,
+        turbulence_power = 1.5)
 
     # 创建动作预测网络
-    net_act = model.ModelActor(env.observation_space.shape[0], env.action_space.shape[0]).to(device)
+    net_act = model.ModelActorDis(env.observation_space.shape[0], env.action_space.n).to(device)
     # 创建状态、动作评价网络
-    net_crt = model.ModelCritic(env.observation_space.shape[0]).to(device)
+    net_crt = model.ModelCriticDis(env.observation_space.shape[0]).to(device)
     print(net_act)
     print(net_crt)
+    if (os.path.exists(os.path.join(save_path, "act-net.data"))):
+        net_act.load_state_dict(torch.load(os.path.join(save_path, "act-net.data")))
+        print("加载act模型成功")
 
-    writer = SummaryWriter(comment="-ppo_" + args.name)
-    agent = model.AgentPPO(net_act, device=device)
+    if (os.path.exists(os.path.join(save_path, "crt-net.data"))):
+        net_crt.load_state_dict(torch.load(os.path.join(save_path, "crt-net.data")))
+        print("加载crt模型成功")
+
+    writer = SummaryWriter(comment="-ppo-discrete_" + args.name)
+    agent = ptan.agent.PolicyAgent(net_act, apply_softmax=True, device=device, preprocessor=ppo_states_preprocessor)
     exp_source = ptan.experience.ExperienceSource(env, agent, steps_count=1)
 
     opt_act = optim.Adam(net_act.parameters(), lr=LEARNING_RATE_ACTOR)
@@ -150,6 +163,7 @@ if __name__ == "__main__":
 
     trajectory = [] # 注意，缓冲区更名为轨迹
     best_reward = None
+    grad_index = 0
     with ptan.common.utils.RewardTracker(writer) as tracker:
         for step_idx, exp in enumerate(exp_source):
             rewards_steps = exp_source.pop_rewards_steps()
@@ -158,9 +172,9 @@ if __name__ == "__main__":
                 writer.add_scalar("episode_steps", np.mean(steps), step_idx)
                 tracker.reward(np.mean(rewards), step_idx)
 
-            if step_idx % TEST_ITERS == 0:
+            if step_idx > 0 and step_idx % TEST_ITERS == 0:
                 ts = time.time()
-                rewards, steps = test_net(net_act, test_env, device=device)
+                rewards, steps = test_net(net_act, test_env, count=1, device=device)
                 print("Test done in %.2f sec, reward %.3f, steps %d" % (
                     time.time() - ts, rewards, steps))
                 writer.add_scalar("test_reward", rewards, step_idx)
@@ -185,9 +199,10 @@ if __name__ == "__main__":
             # 计算优势值和实际Q值
             traj_adv_v, traj_ref_v = calc_adv_ref(trajectory, net_crt, traj_states_v, device=device)
             # 根据状态预测动作
-            mu_v = net_act(traj_states_v)
+            with torch.no_grad():
+                mu_v = net_act(traj_states_v)
             # 计算上一轮训练的评价网络、动作网络动作的概率
-            old_logprob_v = calc_logprob(mu_v, net_act.logstd, traj_actions_v)
+            old_logprob_v = torch.log(mu_v.gather(1, torch.tensor(traj_actions, dtype=torch.int64).to(device).unsqueeze(-1))).detach()
 
             # normalize advantages 归一化计算得到的Q值 作用是提高训练的稳定性
             traj_adv_v = (traj_adv_v - torch.mean(traj_adv_v)) / torch.std(traj_adv_v)
@@ -224,28 +239,27 @@ if __name__ == "__main__":
                     # actor training
                     opt_act.zero_grad()
                     mu_v = net_act(states_v)
+
                     # 计算预测执行动作的高斯概率
-                    logprob_pi_v = calc_logprob(mu_v, net_act.logstd, actions_v)
-                    # 计算实时更新的动作预测网络和之前的动作预测网络之间的预测差异比例
-                    # 公式P317
-                    # 这里使用了exp的除法变换公式（log），所以书中的P317中的在这里是减号
+                    indices = actions_v.long().to(device).unsqueeze(-1)
+                    gathered_values = mu_v.gather(1, indices)
+
+                    logprob_pi_v = torch.log(mu_v.gather(1, indices) + 1e-7)
                     ratio_v = torch.exp(logprob_pi_v - batch_old_logprob_v)
-                    # ratio_v的作用
-                    # 用于计算新旧策略之间的比例，这个比例用于计算新旧策略之间的差异
-                    # 根据这个差异调整网络的参数，使其能够往更好的方向调整
-                    # batch_adv_v对应书中P317中的At
-                    # ratio_v对应书中的rt(theta)
-                    # torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)对应书中的clip
                     surr_obj_v = batch_adv_v * ratio_v
+
                     clipped_surr_v = batch_adv_v * torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)
+
                     loss_policy_v = -torch.min(surr_obj_v, clipped_surr_v).mean()
                     loss_policy_v.backward()
+
                     opt_act.step()
 
                     # 记录总损失，用于计算平均损失变化
                     sum_loss_value += loss_value_v.item()
                     sum_loss_policy += loss_policy_v.item()
                     count_steps += 1
+                    grad_index += 1
 
             trajectory.clear()
             writer.add_scalar("advantage", traj_adv_v.mean().item(), step_idx)
@@ -253,6 +267,8 @@ if __name__ == "__main__":
             writer.add_scalar("loss_policy", sum_loss_policy / count_steps, step_idx)
             writer.add_scalar("loss_value", sum_loss_value / count_steps, step_idx)
 
-            torch.save(net_act.state_dict(), os.path.join(save_path, "ppo-actor.dat"))
-            torch.save(net_crt.state_dict(), os.path.join(save_path, "ppo-critic.dat"))
+            torch.save(net_act.state_dict(), os.path.join(save_path, "act-net.data"))
+            torch.save(net_crt.state_dict(), os.path.join(save_path, "crt-net.data"))
+
+
 

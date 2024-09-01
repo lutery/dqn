@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-通篇下来，发现除了加入了噪音全连接层外，其余的计算方式与最开始的普通dqn计算方式无二
+未验证
 """
 import gymnasium as gym
 import ptan

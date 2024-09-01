@@ -432,6 +432,47 @@ class ModelCritic(nn.Module):
         return self.value(x)
 
 
+class ModelActorDis(nn.Module):
+    def __init__(self, obs_size, act_size):
+        '''
+        :param obs_size: 观测的环境维度
+        :param act_size: 执行的动作的维度
+        '''
+        super(ModelActorDis, self).__init__()
+
+        self.mu = nn.Sequential(
+            nn.Linear(obs_size, HID_SIZE),
+            nn.Tanh(),
+            nn.Linear(HID_SIZE, HID_SIZE),
+            nn.Tanh(),
+            nn.Linear(HID_SIZE, act_size),
+        )
+
+    def forward(self, x):
+        return F.softmax(self.mu(x), dim=1)
+
+
+class ModelCriticDis(nn.Module):
+    '''
+    trop信赖域策略优化评价网络
+    ACKTR算法中使用的critic网络
+    ppt优化评价网络
+    '''
+    def __init__(self, obs_size):
+        super(ModelCriticDis, self).__init__()
+
+        self.value = nn.Sequential(
+            nn.Linear(obs_size, HID_SIZE),
+            nn.ReLU(),
+            nn.Linear(HID_SIZE, HID_SIZE),
+            nn.ReLU(),
+            nn.Linear(HID_SIZE, 1),
+        )
+
+    def forward(self, x):
+        return self.value(x)
+
+
 class AgentTRPO(ptan.agent.BaseAgent):
     '''
     创建代理器
