@@ -31,17 +31,12 @@ if __name__ == "__main__":
     os.makedirs(saves_path, exist_ok=True)
 
     envs = [common.make_env() for _ in range(common.NUM_ENVS)]
-    if args.seed:
-        common.set_seed(args.seed, envs, cuda=args.cuda)
-        suffix = "-seed=%d" % args.seed
-    else:
-        suffix = ""
 
-    test_env = common.make_env(test=True)
-    writer = SummaryWriter(comment="-01_a2c_" + args.name + suffix)
+    test_env = common.make_env()
+    writer = SummaryWriter(comment="taxi_a2c_" + args.name)
 
     # 创建网络
-    net = common.AtariA2C(envs[0].observation_space.shape, envs[0].action_space.n).to(device)
+    net = common.AtariA2C(1, envs[0].action_space.n).to(device)
     print(net)
 
     # todo 这里为什么采用了RMSprop优化器
@@ -95,3 +90,4 @@ if __name__ == "__main__":
                     best_test_reward = test_reward
                 print("%d: test reward=%.2f, steps=%.2f, best_reward=%.2f" % (
                     step_idx, test_reward, test_steps, best_test_reward))
+                torch.save(net.state_dict(), os.path.join(saves_path, "AtariA2C.dat"))

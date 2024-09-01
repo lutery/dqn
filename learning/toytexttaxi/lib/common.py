@@ -17,63 +17,26 @@ VALUE_LOSS_COEF = 0.5
 BATCH_SIZE = REWARD_STEPS * 16
 CLIP_GRAD = 0.5
 
-FRAMES_COUNT = 2 # 每次从环境仅获取两帧图像
-IMG_SHAPE = (FRAMES_COUNT, 84, 84) # 图片维度，（帧数（通道数），高，宽）
 
-
-def make_env(test=False, clip=True):
-    '''
-    创建游戏环境
-    '''
-    if test:
-        args = {'reward_clipping': False,
-                'episodic_life': False}
-    else:
-        args = {'reward_clipping': clip}
-    return ptan.common.wrappers.wrap_dqn(gym.make("BreakoutNoFrameskip-v4"),
-                                         stack_frames=FRAMES_COUNT,
-                                         **args)
-
-
-def set_seed(seed, envs=None, cuda=False):
-    '''
-    为环境设置随机种子
-    '''
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if cuda:
-        torch.cuda.manual_seed(seed)
-
-    if envs:
-        for idx, env in enumerate(envs):
-            # 这个seed是哪里定义的？
-            # 这个seed是gym官方的种子设置函数，用来设置环境的随机种子
-            env.seed(seed + idx)
+def make_env():
+    return gym.make("Taxi-v3")
 
 
 class AtariA2C(nn.Module):
     '''
     创建A2C网络，用来预测执行动作的概率和执行动作后的直接回报
     '''
-    def __init__(self, input_shape, n_actions):
+    def __init__(self, n_obs, n_actions):
         super(AtariA2C, self).__init__()
 
-        #特征提取
-        # todo 通达、尺寸的变化
-        self.conv = nn.Sequential(
-            nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.ReLU(),
-        )
-
-        conv_out_size = self._get_conv_out(input_shape)
 
         # 特征提取后的全连接层
         self.fc = nn.Sequential(
-            nn.Linear(conv_out_size, 512),
+            nn.Linear(n_obs, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, 512),
             nn.ReLU()
         )
         # ## 预测执行动作的大小，后续会将大小转换该概率
@@ -81,22 +44,14 @@ class AtariA2C(nn.Module):
         # ## 根据环境特征的提取预测执行动作所能获取的直接回报，也就是环境执行游戏一步后得到的reward，这里就是和之前网络的不同指出，之前都是预测Q值，这里预测的直接回报
         self.value = nn.Linear(512, 1)
 
-    def _get_conv_out(self, shape):
-        '''
-        计算卷积最后输出的shape，从而得到全连接层的输入维度
-        '''
-        o = self.conv(torch.zeros(1, *shape))
-        return int(np.prod(o.size()))
-
     def forward(self, x):
         '''
         return todo (预测的动作， )
         '''
         # 归一化
-        fx = x.float() / 256
+        fx = x.float()
         # 将卷积输出展平
-        conv_out = self.conv(fx).view(fx.size()[0], -1)
-        fc_out = self.fc(conv_out)
+        fc_out = self.fc(fx)
         return self.policy(fc_out), self.value(fc_out)
 
 
@@ -123,6 +78,34 @@ def discount_with_dones(rewards, dones, gamma):
     return discounted[::-1]
 
 
+class ProbabilityActionSelector(ptan.actions.ActionSelector):
+    """
+    Converts probabilities of actions into action by sampling them
+    概率动作选择器
+    """
+    def __call__(self, probs_and_info):
+        probs, info = probs_and_info
+        assert isinstance(probs, np.ndarray)
+        actions = []
+        valid_actions = [np.where(i['action_mask']==1)[0] for i in info]
+
+        for prob, valid in zip(probs, valid_actions):
+            mask = np.zeros_like(prob)
+            mask[valid] = 1
+
+            masked_prob = mask * prob
+            sum_mask_prob = masked_prob.sum()
+            if sum_mask_prob == 0:
+                masked_prob[valid] = 1 / len(valid)
+            else:
+                masked_prob = masked_prob / sum_mask_prob
+
+            action = np.random.choice(len(prob), p=masked_prob)
+            actions.append(action)
+
+        return np.array(actions)
+
+
 def iterate_batches(envs, net, device="cpu"):
     '''
     param envs: 环境列表
@@ -133,9 +116,11 @@ def iterate_batches(envs, net, device="cpu"):
     # 动作维度，动作数量
     n_actions = envs[0].action_space.n
     # 概率动作选择器
-    act_selector = ptan.actions.ProbabilityActionSelector()
+    act_selector = ProbabilityActionSelector()
     # 重置环境,这里存储着重置后，获取到的环境状态，由于在配置环境是使用了FrameWrapper，所以这里获取的帧数是FRAMES_COUNT（2），所以这里的维度是（NUM_ENVS, FRAMES_COUNT, 84, 84）
     obs = [e.reset() for e in envs]
+    info = [o[1] for o in obs]
+    obs = [[o[0]] for o in obs]
     # 记录每个环境是否已经结束
     batch_dones = [[False] for _ in range(NUM_ENVS)]
     # 记录每个环境的总回报
@@ -144,7 +129,7 @@ def iterate_batches(envs, net, device="cpu"):
     total_steps = [0] * NUM_ENVS
     # todo 作用
     # (NUM_ENVS, REWARD_STEPS) + IMG_SHAPE得到的最终维度是（NUM_ENVS, REWARD_STEPS, FRAMES_COUNT, 84, 84）
-    mb_obs = np.zeros((NUM_ENVS, REWARD_STEPS) + IMG_SHAPE, dtype=np.uint8)
+    mb_obs = np.zeros((NUM_ENVS, REWARD_STEPS, 1), dtype=np.uint8)
     # 记录游戏每进行一步得到的奖励，总共会记录REWARD_STEPS步
     # 在REWARD_STEPS步数结束后，会将其转换为类似Q值的回报
     mb_rewards = np.zeros((NUM_ENVS, REWARD_STEPS), dtype=np.float32)
@@ -174,7 +159,7 @@ def iterate_batches(envs, net, device="cpu"):
             probs_v = F.softmax(logits_v, dim=1)
             probs = probs_v.data.cpu().numpy()
             # 使用概率动作选择其，选择需要执行的动作
-            actions = act_selector(probs)
+            actions = act_selector((probs, info))
             # 保存每一步预测的动作概率
             mb_probs[:, n] = probs
             # 保存每一步选择动作
@@ -184,7 +169,7 @@ def iterate_batches(envs, net, device="cpu"):
             # 遍历每一个环境，执行一步，取得环境的状态，奖励，是否结束，其他信息
             for e_idx, e in enumerate(envs):
                 # 将选择执行的动作传入环境，获取环境的状态，奖励，是否结束，其他信息
-                o, r, done, _ = e.step(actions[e_idx])
+                o, r, done, trunc, _ = e.step(actions[e_idx])
                 # 记录每个环境的总回报
                 total_reward[e_idx] += r
                 # 记录环境的向前一步
@@ -199,7 +184,7 @@ def iterate_batches(envs, net, device="cpu"):
                     total_reward[e_idx] = 0.0
                     total_steps[e_idx] = 0
                 # 更新最新的游戏观察数据到缓存中
-                obs[e_idx] = o
+                obs[e_idx] = [o]
                 # 将当前游戏的回报保存到缓存中
                 mb_rewards[e_idx, n] = r
                 # 记录每一个游戏环境执行当前的一步后，是否结束的标识
@@ -232,7 +217,7 @@ def iterate_batches(envs, net, device="cpu"):
             mb_rewards[e_idx] = rewards
 
         # 有所有缓存中有REWARD_STEPS维度全部展        平
-        out_mb_obs = mb_obs.reshape((-1,) + IMG_SHAPE)
+        out_mb_obs = mb_obs.reshape((-1,1))
         out_mb_rewards = mb_rewards.flatten()
         out_mb_actions = mb_actions.flatten()
         out_mb_values = mb_values.flatten()
@@ -306,6 +291,63 @@ def train_a2c(net, mb_obs, mb_rewards, mb_actions, mb_values, optimizer, tb_trac
     return obs_v
 
 
+def default_states_preprocessor(states):
+    """
+    Convert list of states into the form suitable for model. By default we assume Variable
+    :param states: list of numpy arrays with states
+    :return: Variable
+    这个预处理器的方法就是将list转换为矩阵的形式
+    如果state是一维的，那么就将其转换为[1, D]的形式
+    如果state是多维的，那么就将其转换为[N, E, D]的形式
+    """
+    if len(states) == 1:
+        np_states = np.expand_dims(states[0], 0)
+    else:
+        np_states = np.array([np.array(s, copy=False) for s in states], copy=False)
+    return torch.tensor(np_states)
+
+class PolicyAgent(ptan.agent.BaseAgent):
+    """
+    Policy agent gets action probabilities from the model and samples actions from it
+    """
+    def __init__(self, model, action_selector=ptan.actions.ProbabilityActionSelector(), device="cpu",
+                 apply_softmax=False, preprocessor=default_states_preprocessor):
+        '''
+            model: 策略动作推理网络
+            preprocessor: 将计算的结果转换的数据类型，比如转换为float32
+            apply_softmax: 使用对model的计算结果使用softmax计算结果
+        '''
+        self.model = model
+        self.action_selector = action_selector
+        self.device = device
+        self.apply_softmax = apply_softmax
+        self.preprocessor = preprocessor
+
+    @torch.no_grad()
+    def __call__(self, states, agent_states=None):
+        """
+        Return actions from given list of states
+        :param states: list of states 在本代理器中，agent_states没有参与计算，仅仅是保证其维度和states一样
+        :return: list of actions
+        """
+        if agent_states is None:
+            agent_states = [None] * len(states)
+        # 如果定义了预处理器，则进行预处理擦欧总
+        if self.preprocessor is not None:
+            states = self.preprocessor(states)
+            if torch.is_tensor(states):
+                states = states.to(self.device)
+        # 计算动作概率
+        probs_v = self.model(states.unsqueeze(0))
+        # 如果需要使用softmax计算
+        if self.apply_softmax:
+            probs_v = F.softmax(probs_v, dim=1)
+        probs = probs_v.data.cpu().numpy()
+        # 将网络得到的动作概率丢给动作选择器进行选择需要执行的动作
+        actions = self.action_selector(probs)
+        return np.array(actions), agent_states
+
+
 def test_model(env, net, rounds=3, device="cpu"):
     '''
     param env: 测试游戏环境
@@ -315,16 +357,16 @@ def test_model(env, net, rounds=3, device="cpu"):
 
     total_reward = 0.0
     total_steps = 0
-    agent = ptan.agent.PolicyAgent(lambda x: net(x)[0], device=device, apply_softmax=True)
+    agent = PolicyAgent(lambda x: net(x)[0], device=device, apply_softmax=True)
 
     for _ in range(rounds):
-        obs = env.reset()
+        obs, info = env.reset()
         while True:
             action = agent([obs])[0][0]
-            obs, r, done, _ = env.step(action)
+            obs, r, done, trunc, _ = env.step(action)
             total_reward += r
             total_steps += 1
-            if done:
+            if done or trunc:
                 break
 
     # 平均每一轮的回报和步数
