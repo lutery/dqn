@@ -38,6 +38,9 @@ if __name__ == "__main__":
     # 创建网络
     net = common.AtariA2C(1, envs[0].action_space.n).to(device)
     print(net)
+    if (os.path.exists(os.path.join(saves_path, "AtariA2C.dat"))):
+        net.load_state_dict(torch.load(os.path.join(saves_path, "AtariA2C.dat")))
+        print("加载act模型成功")
 
     # todo 这里为什么采用了RMSprop优化器
     optimizer = optim.RMSprop(net.parameters(), lr=LEARNING_RATE, eps=1e-5)

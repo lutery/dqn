@@ -140,6 +140,13 @@ if __name__ == "__main__":
     net_crt = model.ModelCritic(env.observation_space.shape[0]).to(device)
     print(net_act)
     print(net_crt)
+    if (os.path.exists(os.path.join(save_path, "ppo-actor.dat"))):
+        net_act.load_state_dict(torch.load(os.path.join(save_path, "ppo-actor.dat")))
+        print("加载act模型成功")
+
+    if (os.path.exists(os.path.join(save_path, "ppo-critic.dat"))):
+        net_crt.load_state_dict(torch.load(os.path.join(save_path, "ppo-critic.dat")))
+        print("加载crt模型成功")
 
     writer = SummaryWriter(comment="-ppo_" + args.name)
     agent = model.AgentPPO(net_act, device=device)

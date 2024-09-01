@@ -78,6 +78,13 @@ if __name__ == "__main__":
     # 与之前不同 这里创建NoisyDQN网络层
     net = NoisyDQN(env.observation_space.shape, env.action_space.n).to(device)
     tgt_net = ptan.agent.TargetNet(net)
+    if (os.path.exists(os.path.join(save_path, "noisy_net.pth"))):
+        net.load_state_dict(torch.load(os.path.join(save_path, "noisy_net.pth")))
+        print("加载act模型成功")
+
+    if (os.path.exists(os.path.join(save_path, "noisy_tgt_net.pth"))):
+        tgt_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "noisy_tgt_net.pth")))
+        print("加载tgt_net模型成功")
     # 与之前不同，采用的是ArgmaxActionSelector动作选择的器.选择Q值最大的动作
     agent = ptan.agent.DQNAgent(net, ptan.actions.ArgmaxActionSelector(), device=device)
 
