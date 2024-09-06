@@ -240,6 +240,10 @@ if __name__ == "__main__":
                     # actor training
                     opt_act.zero_grad()
                     mu_v = net_act(states_v)
+                    if torch.isnan(mu_v).any() or torch.isinf(mu_v).any():
+                        print(f"Warning: NaN or inf detected in mu_v at step {step_idx}")
+                        torch.save(net_act.state_dict(), os.path.join(save_path, f"nan_inf_detected_act_net_{step_idx}.pth"))
+                        raise ValueError("NaN or inf detected in mu_v") 
 
                     # 计算预测执行动作的高斯概率
                     indices = actions_v.long().to(device).unsqueeze(-1)
