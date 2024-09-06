@@ -244,17 +244,71 @@ if __name__ == "__main__":
                     # 计算预测执行动作的高斯概率
                     indices = actions_v.long().to(device).unsqueeze(-1)
                     gathered_values = mu_v.gather(1, indices)
+                    min_value = gathered_values.min().item()
+                    max_value = gathered_values.max().item()
+                    zero_count = (gathered_values == 0).sum().item()
+                    near_zero_count = (gathered_values.abs() < 1e-7).sum().item()
+
+                    writer.add_scalar("gathered_min", min_value, grad_index)
+                    writer.add_scalar("gathered_max", max_value, grad_index)
+                    writer.add_scalar("gathered_zero_count", zero_count, grad_index)
+                    writer.add_scalar("gathered_near_zero_count", near_zero_count, grad_index)
+                    
 
                     logprob_pi_v = torch.log(mu_v.gather(1, indices) + 1e-7)
+                    writer.add_scalar("logprob_pi_v mean", logprob_pi_v.mean().item(), grad_index)
+                    writer.add_scalar("logprob_pi_v max", logprob_pi_v.max().item(), grad_index)
+                    writer.add_scalar("logprob_pi_v min", logprob_pi_v.min().item(), grad_index)
+                    writer.add_scalar("batch_old_logprob_v mean", batch_old_logprob_v.mean().item(), grad_index)
+                    writer.add_scalar("batch_old_logprob_v max", batch_old_logprob_v.max().item(), grad_index)
+                    writer.add_scalar("batch_old_logprob_v min", batch_old_logprob_v.min().item(), grad_index)
+                    writer.add_scalar("ratio_v_pre mean", (logprob_pi_v - batch_old_logprob_v).mean().item(), grad_index)
+                    writer.add_scalar("ratio_v_pre max", (logprob_pi_v - batch_old_logprob_v).max().item(), grad_index)
+                    writer.add_scalar("ratio_v_pre min", (logprob_pi_v - batch_old_logprob_v).min().item(), grad_index)
+                    
                     ratio_v = torch.exp(logprob_pi_v - batch_old_logprob_v)
+                    writer.add_scalar("ratio_v mean", ratio_v.mean().item(), grad_index)
+                    writer.add_scalar("ratio_v max", ratio_v.max().item(), grad_index)
+                    writer.add_scalar("ratio_v min", ratio_v.min().item(), grad_index)
+                    writer.add_scalar("batch_adv_v mean", batch_adv_v.mean().item(), grad_index)
+                    writer.add_scalar("batch_adv_v min", batch_adv_v.min().item(), grad_index)
+                    writer.add_scalar("batch_adv_v max", batch_adv_v.max().item(), grad_index)
                     surr_obj_v = batch_adv_v * ratio_v
+                    writer.add_scalar("surr_obj_v mean", surr_obj_v.mean().item(), grad_index)
+                    writer.add_scalar("surr_obj_v min", surr_obj_v.min().item(), grad_index)
+                    writer.add_scalar("surr_obj_v max", surr_obj_v.max().item(), grad_index)
 
                     clipped_surr_v = batch_adv_v * torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)
+                    writer.add_scalar("clipped_surr_v mean", clipped_surr_v.mean().item(), grad_index)
+                    writer.add_scalar("clipped_surr_v min", clipped_surr_v.min().item(), grad_index)
+                    writer.add_scalar("clipped_surr_v max", clipped_surr_v.max().item(), grad_index)
+
+                    writer.add_scalar("torch.clamp mean", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).mean().item(), grad_index)
+                    writer.add_scalar("torch.clamp min", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).min().item(), grad_index)
+                    writer.add_scalar("torch.clamp max", torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS).max().item(), grad_index)
 
                     loss_policy_v = -torch.min(surr_obj_v, clipped_surr_v).mean()
                     loss_policy_v.backward()
+                    grad_max = 0.0
+                    grad_means = 0.0
+                    grad_count = 0
+                    for p in net_act.parameters():
+                        grad_max = max(grad_max, p.grad.abs().max().item())
+                        grad_means += (p.grad ** 2).mean().sqrt().item()
+                        grad_count += 1
+                    writer.add_scalar("grad_l2", grad_means / grad_count, grad_index)
+                    writer.add_scalar("grad_max", grad_max, grad_index)
 
                     opt_act.step()
+                    weights_max = 0.0
+                    weights_means = 0.0
+                    weights_count = 0
+                    for p in net_act.parameters():
+                        weights_max = max(weights_max, p.data.abs().max().item())
+                        weights_means += (p.data ** 2).mean().sqrt().item()
+                        weights_count += 1
+                    writer.add_scalar("weights_l2", weights_means / weights_count, grad_index)
+                    writer.add_scalar("weights_max", weights_max, grad_index)
 
                     # 记录总损失，用于计算平均损失变化
                     sum_loss_value += loss_value_v.item()
