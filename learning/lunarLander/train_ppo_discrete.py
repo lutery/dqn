@@ -23,8 +23,8 @@ GAMMA = 0.99
 GAE_LAMBDA = 0.95 # 优势估计器的lambda因子，0.95是一个比较好的值
 
 TRAJECTORY_SIZE = 2049 # todo 作用 看代码好像是采样的轨迹长度（轨迹，也就是连续采样缓存长度，游戏是连续的）
-LEARNING_RATE_ACTOR = 5e-5
-LEARNING_RATE_CRITIC = 5e-5
+LEARNING_RATE_ACTOR = 2e-5
+LEARNING_RATE_CRITIC = 2e-5
 
 PPO_EPS = 0.2
 PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         print("加载crt模型成功")
 
     writer = SummaryWriter(comment="-ppo-discrete_" + args.name)
-    agent = ptan.agent.PolicyAgent(net_act, apply_softmax=True, device=device, preprocessor=ppo_states_preprocessor)
+    agent = ptan.agent.PolicyAgent(net_act, device=device, preprocessor=ppo_states_preprocessor)
     exp_source = ptan.experience.ExperienceSource(env, agent, steps_count=1)
 
     opt_act = optim.Adam(net_act.parameters(), lr=LEARNING_RATE_ACTOR)
@@ -219,6 +219,8 @@ if __name__ == "__main__":
             sum_loss_value = 0.0
             sum_loss_policy = 0.0
             count_steps = 0
+            old_ratio_v_mean = 0
+            is_interrupt = False
 
             # 开始进行PPO的迭代（近端策略优化）
             for epoch in range(PPO_EPOCHES):
@@ -271,6 +273,11 @@ if __name__ == "__main__":
                     writer.add_scalar("ratio_v_pre min", (logprob_pi_v - batch_old_logprob_v).min().item(), grad_index)
                     
                     ratio_v = torch.exp(logprob_pi_v - batch_old_logprob_v)
+                    if abs(ratio_v.mean().item() - old_ratio_v_mean) > 10:
+                        opt_act.zero_grad()
+                        is_interrupt = True
+                        break
+                    old_ratio_v_mean = ratio_v.mean().item()
                     writer.add_scalar("ratio_v mean", ratio_v.mean().item(), grad_index)
                     writer.add_scalar("ratio_v max", ratio_v.max().item(), grad_index)
                     writer.add_scalar("ratio_v min", ratio_v.min().item(), grad_index)
@@ -319,6 +326,9 @@ if __name__ == "__main__":
                     sum_loss_policy += loss_policy_v.item()
                     count_steps += 1
                     grad_index += 1
+                if is_interrupt:
+                    is_interrupt = False
+                    break
 
             trajectory.clear()
             writer.add_scalar("advantage", traj_adv_v.mean().item(), step_idx)
