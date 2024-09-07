@@ -54,11 +54,11 @@ def play_acrobot():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Create the DQN model
-    net = NoisyDQN(env.observation_space.shape[0], env.action_space.n).to(device)
+    net = NoisyDQN(env.observation_space.shape, env.action_space.n).to(device)
 
     # Load the trained model
     save_path = "saves"
-    model_path = os.path.join(save_path, "net.pth")
+    model_path = os.path.join(save_path, "noisy_net.pth")
 
     if os.path.exists(model_path):
         net.load_state_dict(torch.load(model_path, map_location=device))
@@ -75,7 +75,7 @@ def play_acrobot():
 
     while not done:
         state_v = torch.tensor(state).float().unsqueeze(0).to(device)
-        q_vals = net.qvals(state_v)
+        q_vals = net(state_v)
         _, act_v = torch.max(q_vals, dim=1)
         action = int(act_v.item())
 

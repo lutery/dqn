@@ -40,9 +40,9 @@ if __name__ == "__main__":
     total_reward = 0.0
     total_steps = 0
     while True:
-        obs_v = torch.FloatTensor(obs)
+        obs_v = torch.FloatTensor(obs).to(device=device)
         mu_v = net(obs_v)
-        action = mu_v.squeeze(dim=0).data.numpy()
+        action = mu_v.cpu().squeeze(dim=0).data.numpy()
         action = np.clip(action, -1, 1)
         obs, reward, done, trunc, _ = env.step(action)
         done = done or trunc

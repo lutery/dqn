@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 '''
-实现基于trpo的训练方法
-验证算法通过，算法有效，且比DDPG要更快达到最好的奖励
 '''
 import gymnasium as gym
 import argparse
@@ -27,6 +25,7 @@ if __name__ == "__main__":
 
     env = gym.make(
         "LunarLander-v2",
+        render_mode="human",
         continuous=False,
         gravity=-10.0,
         enable_wind=False,
