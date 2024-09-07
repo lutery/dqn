@@ -22,9 +22,9 @@ ENV_ID = "CarRacing-v2"
 GAMMA = 0.99
 GAE_LAMBDA = 0.95 # 优势估计器的lambda因子，0.95是一个比较好的值
 
-TRAJECTORY_SIZE = 1025 # todo 作用 看代码好像是采样的轨迹长度（轨迹，也就是连续采样缓存长度，游戏是连续的）
-LEARNING_RATE_ACTOR = 1e-3
-LEARNING_RATE_CRITIC = 1e-2
+TRAJECTORY_SIZE = 2049 # todo 作用 看代码好像是采样的轨迹长度（轨迹，也就是连续采样缓存长度，游戏是连续的）
+LEARNING_RATE_ACTOR = 1e-4
+LEARNING_RATE_CRITIC = 1e-3
 
 PPO_EPS = 0.2
 PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
@@ -167,11 +167,10 @@ if __name__ == "__main__":
     net_act = model.ModelActor(env.observation_space.shape, env.action_space.shape[0]).to(device)
     # 创建状态、动作评价网络
     net_crt = model.ModelCritic(env.observation_space.shape).to(device)
-    if (os.path.exists(os.path.join(save_path, "act.pth"))):
-        net_act.load_state_dict(torch.load(os.path.join(save_path, "act.pth")))
-
-    if (os.path.exists(os.path.join(save_path, "crt.pth"))):
-        net_crt.load_state_dict(torch.load(os.path.join(save_path, "crt.pth")))
+    if (os.path.exists(os.path.join(save_path, "act-net.dat"))):
+        net_act.load_state_dict(torch.load(os.path.join(save_path, "act-net.dat")))
+        net_crt.load_state_dict(torch.load(os.path.join(save_path, "crt-net.dat")))
+        print("加载模型成功")
 
     print(net_act)
     print(net_crt)
@@ -185,6 +184,7 @@ if __name__ == "__main__":
 
     trajectory = [] # 注意，缓冲区更名为轨迹
     best_reward = None
+    grad_index = 0
     with ptan.common.utils.RewardTracker(writer) as tracker:
         for step_idx, exp in enumerate(exp_source):
             rewards_steps = exp_source.pop_rewards_steps()
@@ -239,6 +239,8 @@ if __name__ == "__main__":
             sum_loss_value = 0.0
             sum_loss_policy = 0.0
             count_steps = 0
+            old_ratio_v_mean = 0
+            is_interrupt = False
 
             # 开始进行PPO的迭代（近端策略优化）
             for epoch in range(PPO_EPOCHES):
@@ -260,31 +262,76 @@ if __name__ == "__main__":
                     # actor training
                     opt_act.zero_grad()
                     mu_v = net_act(states_v)
+                    if torch.isnan(mu_v).any() or torch.isinf(mu_v).any():
+                        print(f"Warning: NaN or inf detected in mu_v at step {step_idx}")
+                        torch.save(net_act.state_dict(), os.path.join(save_path, f"nan_inf_detected_act_net_{step_idx}.pth"))
+                        raise ValueError("NaN or inf detected in mu_v")
                     # 计算预测执行动作的高斯概率
                     logprob_pi_v = calc_logprob(mu_v, net_act.logstd, actions_v)
-                    # 计算实时更新的动作预测网络和之前的动作预测网络之间的预测差异比例
-                    # 公式P317
-                    # 这里使用了exp的除法变换公式（log），所以书中的P317中的在这里是减号
+                    min_value = logprob_pi_v.min().item()
+                    max_value = logprob_pi_v.max().item()
+                    mean_value = logprob_pi_v.mean().item()
+
+                    writer.add_scalar("logprob_pi_v min", min_value, grad_index)
+                    writer.add_scalar("logprob_pi_v max", max_value, grad_index)
+                    writer.add_scalar("logprob_pi_v mean", mean_value, grad_index)
+
                     ratio_v = torch.exp(logprob_pi_v - batch_old_logprob_v)
-                    # ratio_v的作用
-                    # 用于计算新旧策略之间的比例，这个比例用于计算新旧策略之间的差异
-                    # 根据这个差异调整网络的参数，使其能够往更好的方向调整
-                    # batch_adv_v对应书中P317中的At
-                    # ratio_v对应书中的rt(theta)
-                    # torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)对应书中的clip
+                    if abs(ratio_v.mean().item() - old_ratio_v_mean) > 10:
+                        opt_act.zero_grad()
+                        is_interrupt = True
+                        break
+                    old_ratio_v_mean = ratio_v.mean().item()
+                    writer.add_scalar("ratio_v mean", ratio_v.mean().item(), grad_index)
+                    writer.add_scalar("ratio_v max", ratio_v.max().item(), grad_index)
+                    writer.add_scalar("ratio_v min", ratio_v.min().item(), grad_index)
+                    writer.add_scalar("batch_adv_v mean", batch_adv_v.mean().item(), grad_index)
+                    writer.add_scalar("batch_adv_v min", batch_adv_v.min().item(), grad_index)
+                    writer.add_scalar("batch_adv_v max", batch_adv_v.max().item(), grad_index)
+
                     surr_obj_v = batch_adv_v * ratio_v
+                    writer.add_scalar("surr_obj_v mean", surr_obj_v.mean().item(), grad_index)
+                    writer.add_scalar("surr_obj_v min", surr_obj_v.min().item(), grad_index)
+                    writer.add_scalar("surr_obj_v max", surr_obj_v.max().item(), grad_index)
+
                     clipped_surr_v = batch_adv_v * torch.clamp(ratio_v, 1.0 - PPO_EPS, 1.0 + PPO_EPS)
+                    writer.add_scalar("clipped_surr_v mean", clipped_surr_v.mean().item(), grad_index)
+                    writer.add_scalar("clipped_surr_v min", clipped_surr_v.min().item(), grad_index)
+                    writer.add_scalar("clipped_surr_v max", clipped_surr_v.max().item(), grad_index)
+
                     loss_policy_v = -torch.min(surr_obj_v, clipped_surr_v).mean()
                     loss_policy_v.backward()
+                    grad_max = 0.0
+                    grad_means = 0.0
+                    grad_count = 0
+                    for p in net_act.parameters():
+                        grad_max = max(grad_max, p.grad.abs().max().item())
+                        grad_means += (p.grad ** 2).mean().sqrt().item()
+                        grad_count += 1
+                    writer.add_scalar("grad_l2", grad_means / grad_count, grad_index)
+                    writer.add_scalar("grad_max", grad_max, grad_index)
                     opt_act.step()
+                    weights_max = 0.0
+                    weights_means = 0.0
+                    weights_count = 0
+                    for p in net_act.parameters():
+                        weights_max = max(weights_max, p.data.abs().max().item())
+                        weights_means += (p.data ** 2).mean().sqrt().item()
+                        weights_count += 1
+                    writer.add_scalar("weights_l2", weights_means / weights_count, grad_index)
+                    writer.add_scalar("weights_max", weights_max, grad_index)
 
                     # 记录总损失，用于计算平均损失变化
                     sum_loss_value += loss_value_v.item()
                     sum_loss_policy += loss_policy_v.item()
                     count_steps += 1
+                    grad_index += 1
+                if is_interrupt:
+                    is_interrupt = False
+                    break
 
-            torch.save(net_act.state_dict(), os.path.join(save_path, "act.pth"))
-            torch.save(net_crt.state_dict(), os.path.join(save_path, "crt.pth"))
+            torch.save(net_act.state_dict(), os.path.join(save_path, "act-net.dat"))
+            torch.save(net_crt.state_dict(), os.path.join(save_path, "crt-net.dat"))
             trajectory.clear()
             writer.add_scalar("advantage", traj_adv_v.mean().item(), step_idx)
             writer.add_scalar("values", traj_ref_v.mean().item(), step_idx)
