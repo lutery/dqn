@@ -1,13 +1,13 @@
 import gym
 
 # Initialize the environment
-env = gym.make('ALE/Adventure-v5', render_mode="human")
+env = gym.make('ALE/Adventure-ram-v5', render_mode="human")
 
 # Reset the environment to get the initial state
 state = env.reset()
-
+total_reward = 0
 # Run a loop to play the game
-for _ in range(1000):
+for _ in range(10000):
     env.render()  # Render the environment
 
     # Take a random action
@@ -15,6 +15,9 @@ for _ in range(1000):
 
     # Get the next state, reward, done flag, and info from the environment
     state, reward, done, trunc, info = env.step(action)
+    total_reward += reward
+    print("reward: ", total_reward)
+    print("info: ", info)
 
     # If done, reset the environment
     if done or trunc:
