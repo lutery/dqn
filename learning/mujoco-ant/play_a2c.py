@@ -20,7 +20,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    env = gym.make(ENV_ID)
+    env = gym.make(ENV_ID, render_mode="human")
 
     net = model.ModelA2C(env.observation_space.shape[0], env.action_space.shape[0]).to(device)
     net.load_state_dict(torch.load(args.model))
