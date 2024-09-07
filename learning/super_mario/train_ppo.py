@@ -215,7 +215,7 @@ if __name__ == "__main__":
         print("加载crt模型成功")
 
     writer = SummaryWriter(comment="-ppo_" + args.name)
-    agent = ptan.agent.PolicyAgent(net_act, apply_softmax=True, device=device, preprocessor=ppo_states_preprocessor)
+    agent = ptan.agent.PolicyAgent(net_act, device=device, preprocessor=ppo_states_preprocessor)
     exp_source = ptan.experience.ExperienceSource(env, agent, steps_count=1)
 
     opt_act = optim.Adam(net_act.parameters(), lr=LEARNING_RATE_ACTOR)
@@ -278,6 +278,8 @@ if __name__ == "__main__":
             sum_loss_value = 0.0
             sum_loss_policy = 0.0
             count_steps = 0
+            old_ratio_v_mean = 0
+            is_interrupt = False
 
             # 开始进行PPO的迭代（近端策略优化）
             for epoch in range(PPO_EPOCHES):
@@ -330,13 +332,7 @@ if __name__ == "__main__":
                     # 计算实时更新的动作预测网络和之前的动作预测网络之间的预测差异比例
                     # 公式P317
                     # 这里使用了exp的除法变换公式（log），所以书中的P317中的在这里是减号
-                    if torch.isnan(logprob_pi_v).any() or torch.isinf(logprob_pi_v).any():
-                        print(f"Warning: NaN or inf detected in logprob_pi_v at step {step_idx}")
-                        raise ValueError("NaN or inf detected in logprob_pi_v") 
-                    
-                    if torch.isnan(batch_old_logprob_v).any() or torch.isinf(batch_old_logprob_v).any():
-                        print(f"Warning: NaN or inf detected in batch_old_logprob_v at step {step_idx}")
-                        raise ValueError("NaN or inf detected in batch_old_logprob_v")
+
                     writer.add_scalar("batch_old_logprob_v mean", batch_old_logprob_v.mean().item(), grad_index)
                     writer.add_scalar("batch_old_logprob_v max", batch_old_logprob_v.max().item(), grad_index)
                     writer.add_scalar("batch_old_logprob_v min", batch_old_logprob_v.min().item(), grad_index)
@@ -344,6 +340,11 @@ if __name__ == "__main__":
                     writer.add_scalar("ratio_v_pre max", (logprob_pi_v - batch_old_logprob_v).max().item(), grad_index)
                     writer.add_scalar("ratio_v_pre min", (logprob_pi_v - batch_old_logprob_v).min().item(), grad_index)
                     ratio_v = torch.exp(logprob_pi_v - batch_old_logprob_v)
+                    if abs(ratio_v.mean().item() - old_ratio_v_mean) > 10:
+                        opt_act.zero_grad()
+                        is_interrupt = True
+                        break
+                    old_ratio_v_mean = ratio_v.mean().item()
                     writer.add_scalar("ratio_v mean", ratio_v.mean().item(), grad_index)
                     writer.add_scalar("ratio_v max", ratio_v.max().item(), grad_index)
                     writer.add_scalar("ratio_v min", ratio_v.min().item(), grad_index)
@@ -381,17 +382,17 @@ if __name__ == "__main__":
                         grad_count += 1
                     writer.add_scalar("grad_l2", grad_means / grad_count, grad_index)
                     writer.add_scalar("grad_max", grad_max, grad_index)
-                    nn_utils.clip_grad_norm_(net_act.parameters(), CLIP_GRAD)
+                    # nn_utils.clip_grad_norm_(net_act.parameters(), CLIP_GRAD)
 
-                    clip_grad_max = 0.0
-                    clip_grad_means = 0.0
-                    clip_grad_count = 0
-                    for p in net_act.parameters():
-                        clip_grad_max = max(clip_grad_max, p.grad.abs().max().item())
-                        clip_grad_means += (p.grad ** 2).mean().sqrt().item()
-                        clip_grad_count += 1
-                    writer.add_scalar("clip_grad_l2", clip_grad_means / clip_grad_count, grad_index)
-                    writer.add_scalar("clip_grad_max", clip_grad_max, grad_index)
+                    # clip_grad_max = 0.0
+                    # clip_grad_means = 0.0
+                    # clip_grad_count = 0
+                    # for p in net_act.parameters():
+                    #     clip_grad_max = max(clip_grad_max, p.grad.abs().max().item())
+                    #     clip_grad_means += (p.grad ** 2).mean().sqrt().item()
+                    #     clip_grad_count += 1
+                    # writer.add_scalar("clip_grad_l2", clip_grad_means / clip_grad_count, grad_index)
+                    # writer.add_scalar("clip_grad_max", clip_grad_max, grad_index)
 
                     opt_act.step()
 
@@ -410,6 +411,9 @@ if __name__ == "__main__":
                     sum_loss_policy += loss_policy_v.item()
                     count_steps += 1
                     grad_index += 1
+                if is_interrupt:
+                    is_interrupt = False
+                    break
 
             trajectory.clear()
             writer.add_scalar("advantage", traj_adv_v.mean().item(), step_idx)
