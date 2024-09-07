@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
-未验证
+验证通过
 
 根据训练过程，发现是可以训练成功的，不过训练到最后会发生平均奖励下降、上升的循环，怀疑是学习率过大，导致后续训练出现震荡
+调低学习率后，继续训练未发现可以继续提高，不知道是训练时间不够还是其他什么原因
+目前发现优的学习率还是
+LEARNING_RATE_ACTOR = 1e-4
+LEARNING_RATE_CRITIC = 1e-3
 """
 import os
 import math
