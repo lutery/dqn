@@ -38,7 +38,7 @@ def test_net(net, env, count=10, device="cpu"):
     rewards = 0.0
     steps = 0
     for _ in range(count):
-        obs, info = env.reset()
+        obs, _ = env.reset()
         while True:
             obs_v = ptan.agent.float32_preprocessor([obs]).to(device)
             mu_v = net(obs_v)
