@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-未验证
+验证通过
 """
 import gymnasium as gym
 import ptan
