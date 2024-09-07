@@ -82,6 +82,9 @@ if __name__ == "__main__":
     # 创建模型网络
     net = model.ModelA2C(env.observation_space.shape[0], env.action_space.shape[0]).to(device)
     print(net)
+    if (os.path.exists(os.path.join(save_path, "net-act.dat"))):
+        net.load_state_dict(torch.load(os.path.join(save_path, "net-act.dat")))
+        print("模型加载成功")
 
     writer = SummaryWriter(comment="-a2c_" + args.name)
     # 创建连续纸神经网络代理器
