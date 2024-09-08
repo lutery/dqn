@@ -6,10 +6,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.utils as nn_utils
+from collections import deque
 
 DEFAULT_SEED = 20 # 环境默认的随机种子
 
-NUM_ENVS = 16 # 创建环境的数量
+NUM_ENVS = 12 # 创建环境的数量
 GAMMA = 0.99
 REWARD_STEPS = 5 # todo 作用 目前看起来像是记录环境交互结果的步数
 ENTROPY_BETA = 0.01
@@ -17,8 +18,8 @@ VALUE_LOSS_COEF = 0.5
 BATCH_SIZE = REWARD_STEPS * 16
 CLIP_GRAD = 0.5
 
-FRAMES_COUNT = 3 # 每次从环境仅获取两帧图像
-IMG_SHAPE = (FRAMES_COUNT, 250, 160) # 图片维度，（帧数（通道数），高，宽）
+FRAMES_COUNT = 12
+IMG_SHAPE = (FRAMES_COUNT, 210, 160) # 图片维度，（帧数（通道数），高，宽）
 
 class TransposeObservation(gym.ObservationWrapper):
     def __init__(self, env=None):
@@ -28,8 +29,48 @@ class TransposeObservation(gym.ObservationWrapper):
         # 将观察从 (H, W, C) 转换为 (C, H, W)
         return observation.transpose(2, 0, 1)
 
+class StackFrameWrapper(gym.Wrapper):
+    def __init__(self, env, n_frames=4):
+        super().__init__(env)
+        self.env = env
+        self.n_frames = n_frames
+        self.frames = deque([], maxlen=n_frames)
+
+        low = np.repeat(self.observation_space.low, n_frames, axis=2)
+        high = np.repeat(self.observation_space.high, n_frames, axis=2)
+        self.observation_space = gym.spaces.Box(low=low, high=high, dtype=self.observation_space.dtype)
+
+        self.obs = []
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        for _ in range(self.n_frames):
+            self.frames.append(obs)
+        return np.concatenate(list(self.frames), axis=0), info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self.frames.append(obs)
+        return np.concatenate(list(self.frames), axis=0), reward, terminated, truncated, info
+
+def wrap_dqn(env, stack_frames=4, episodic_life=True, reward_clipping=True):
+    if episodic_life:
+        # 将多条生命的游戏模拟成单条生命ActorCriticAgent
+        env = ptan.common.wrappers.EpisodicLifeEnv(env)
+    # 增强初始化
+    env = ptan.common.wrappers.NoopResetEnv(env, noop_max=30)
+    # 跳帧包装器
+    # env = MaxAndSkipEnv(env, skip=4)
+    env = ptan.common.wrappers.FireResetEnv(env)
+    # env = ptan.common.wrappers.ProcessFrame84(env)
+    env = TransposeObservation(env)
+    # env = ptan.common.wrappers.FrameStack(env, stack_frames)
+    env = StackFrameWrapper(env)
+    env = ptan.common.wrappers.ClippedRewardsWrapper(env)
+    return env
+
 def make_env():
-    return TransposeObservation(gym.make("ALE/Adventure-v5"))
+    return wrap_dqn(gym.make("ALE/Alien-v5"))
 
 
 def set_seed(seed, envs=None, cuda=False):

@@ -1,7 +1,7 @@
 import gym
 
 # Initialize the environment
-env = gym.make('ALE/Adventure-ram-v5', render_mode="human")
+env = gym.make('ALE/Alien-v5', render_mode="human")
 
 # Reset the environment to get the initial state
 state = env.reset()
@@ -16,8 +16,9 @@ for _ in range(10000):
     # Get the next state, reward, done flag, and info from the environment
     state, reward, done, trunc, info = env.step(action)
     total_reward += reward
-    print("reward: ", total_reward)
-    print("info: ", info)
+    if reward != 0:
+        print("reward: ", reward)
+        print("info: ", info)
 
     # If done, reset the environment
     if done or trunc:
