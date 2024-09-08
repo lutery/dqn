@@ -157,7 +157,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join(r"K:\Projects\python\DQN\learning\CarRacing\saves", "ppo-" + args.name)
+    save_path = os.path.join("saves", "ppo-" + args.name)
     os.makedirs(save_path, exist_ok=True)
 
     env = TransposeObservation(gym.make(args.env, domain_randomize=True, continuous=True))
