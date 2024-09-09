@@ -23,7 +23,7 @@ GAMMA = 0.99
 GAE_LAMBDA = 0.95 # 优势估计器的lambda因子，0.95是一个比较好的值
 
 TRAJECTORY_SIZE = 2049 # todo 作用 看代码好像是采样的轨迹长度（轨迹，也就是连续采样缓存长度，游戏是连续的）
-LEARNING_RATE_ACTOR = 1e-4
+LEARNING_RATE_ACTOR = 1e-3
 LEARNING_RATE_CRITIC = 1e-3
 
 PPO_EPS = 0.2
@@ -260,7 +260,7 @@ if __name__ == "__main__":
                     actions_v = traj_actions_v[batch_ofs:batch_ofs + PPO_BATCH_SIZE]
                     batch_adv_v = traj_adv_v[batch_ofs:batch_ofs + PPO_BATCH_SIZE].unsqueeze(-1)
                     batch_ref_v = traj_ref_v[batch_ofs:batch_ofs + PPO_BATCH_SIZE]
-                    batch_old_logprob_v = old_logprob_v[batch_ofs:batch_ofs + PPO_BATCH_SIZE]
+                    batch_old_logprob_v = old_logprob_v[batch_ofs:batch_ofs + PPO_BATCH_SIZE] + 1e-8
 
                     # critic training
                     # 这边就是在计算预测Q值和实际Q值之间的差异损失
@@ -279,7 +279,7 @@ if __name__ == "__main__":
                         torch.save(net_act.state_dict(), os.path.join(save_path, f"nan_inf_detected_act_net_{step_idx}.pth"))
                         raise ValueError("NaN or inf detected in mu_v")
                     # 计算预测执行动作的高斯概率
-                    logprob_pi_v = calc_logprob(mu_v, net_act.logstd, actions_v)
+                    logprob_pi_v = calc_logprob(mu_v, net_act.logstd, actions_v) + 1e-8
                     min_value = net_act.logstd.min().item()
                     max_value = net_act.logstd.max().item()
                     mean_value = net_act.logstd.mean().item()
@@ -315,10 +315,11 @@ if __name__ == "__main__":
 
                     ratio_v = torch.exp(logprob_pi_v - batch_old_logprob_v)
                     if abs(ratio_v.mean().item() - old_ratio_v_mean) > 10:
-                        opt_act.zero_grad()
-                        is_interrupt = True
-                        break
-                    old_ratio_v_mean = ratio_v.mean().item()
+                        writer.add_scalar("ratio_v_more_big", abs(ratio_v.mean().item() - old_ratio_v_mean), grad_index)
+                        # opt_act.zero_grad()
+                        # is_interrupt = True
+                        # break
+                    # old_ratio_v_mean = ratio_v.mean().item()
                     writer.add_scalar("ratio_v mean", ratio_v.mean().item(), grad_index)
                     writer.add_scalar("ratio_v max", ratio_v.max().item(), grad_index)
                     writer.add_scalar("ratio_v min", ratio_v.min().item(), grad_index)
