@@ -276,6 +276,23 @@ if __name__ == "__main__":
                     writer.add_scalar("logprob_pi_v max", max_value, grad_index)
                     writer.add_scalar("logprob_pi_v mean", mean_value, grad_index)
 
+                    min_value = batch_old_logprob_v.min().item()
+                    max_value = batch_old_logprob_v.max().item()
+                    mean_value = batch_old_logprob_v.mean().item()
+
+                    writer.add_scalar("batch_old_logprob_v min", min_value, grad_index)
+                    writer.add_scalar("batch_old_logprob_v max", max_value, grad_index)
+                    writer.add_scalar("batch_old_logprob_v mean", mean_value, grad_index)
+
+                    pre_ratio_v = logprob_pi_v - batch_old_logprob_v
+                    min_value = pre_ratio_v.min().item()
+                    max_value = pre_ratio_v.max().item()
+                    mean_value = pre_ratio_v.mean().item()
+
+                    writer.add_scalar("pre_ratio_v min", min_value, grad_index)
+                    writer.add_scalar("pre_ratio_v max", max_value, grad_index)
+                    writer.add_scalar("pre_ratio_v mean", mean_value, grad_index)
+
                     ratio_v = torch.exp(logprob_pi_v - batch_old_logprob_v)
                     if abs(ratio_v.mean().item() - old_ratio_v_mean) > 10:
                         opt_act.zero_grad()
