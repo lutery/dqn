@@ -197,7 +197,6 @@ if __name__ == "__main__":
     trajectory = [] # 注意，缓冲区更名为轨迹
     best_reward = None
     grad_index = 0
-    old_policy_mean = 0
     with ptan.common.utils.RewardTracker(writer) as tracker:
         for step_idx, exp in enumerate(exp_source):
             rewards_steps = exp_source.pop_rewards_steps()
@@ -252,6 +251,7 @@ if __name__ == "__main__":
             sum_loss_value = 0.0
             sum_loss_policy = 0.0
             count_steps = 0
+            old_policy_mean = 123456
             old_ratio_v_mean = 0
             is_interrupt = False
 
@@ -297,7 +297,7 @@ if __name__ == "__main__":
                     writer.add_scalar("logprob_pi_v min", min_value, grad_index)
                     writer.add_scalar("logprob_pi_v max", max_value, grad_index)
                     writer.add_scalar("logprob_pi_v mean", mean_value, grad_index)
-                    if abs(mean_value - old_policy_mean) > 15:
+                    if old_policy_mean != 123456 and abs(mean_value - old_policy_mean) > 10:
                         writer.add_scalar("old_policy_mean", old_policy_mean, grad_index)
                         opt_act.zero_grad()
                         is_interrupt = True
