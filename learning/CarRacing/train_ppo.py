@@ -298,6 +298,7 @@ if __name__ == "__main__":
                     writer.add_scalar("logprob_pi_v max", max_value, grad_index)
                     writer.add_scalar("logprob_pi_v mean", mean_value, grad_index)
                     if abs(mean_value - old_policy_mean) > 15:
+                        writer.add_scalar("old_policy_mean", old_policy_mean, grad_index)
                         opt_act.zero_grad()
                         is_interrupt = True
                         break
