@@ -29,6 +29,7 @@ LEARNING_RATE_CRITIC = 1e-3
 PPO_EPS = 0.2
 PPO_EPOCHES = 10 # todo 执行ppo的迭代次数 作用
 PPO_BATCH_SIZE = 64 # 每次进行轨迹样本计算的batch长度
+ENTROPY_BETA = 1e-3
 
 TEST_ITERS = 100000 # 采样迭代多少次，进行一次游戏测试
 
@@ -250,6 +251,7 @@ if __name__ == "__main__":
             sum_loss_value = 0.0
             sum_loss_policy = 0.0
             count_steps = 0
+            old_policy_mean = 0
             old_ratio_v_mean = 0
             is_interrupt = False
 
@@ -295,6 +297,11 @@ if __name__ == "__main__":
                     writer.add_scalar("logprob_pi_v min", min_value, grad_index)
                     writer.add_scalar("logprob_pi_v max", max_value, grad_index)
                     writer.add_scalar("logprob_pi_v mean", mean_value, grad_index)
+                    if abs(mean_value - old_policy_mean) > 15:
+                        opt_act.zero_grad()
+                        is_interrupt = True
+                        break
+                    old_policy_mean = mean_value
 
                     min_value = batch_old_logprob_v.min().item()
                     max_value = batch_old_logprob_v.max().item()
@@ -336,9 +343,10 @@ if __name__ == "__main__":
                     writer.add_scalar("clipped_surr_v mean", clipped_surr_v.mean().item(), grad_index)
                     writer.add_scalar("clipped_surr_v min", clipped_surr_v.min().item(), grad_index)
                     writer.add_scalar("clipped_surr_v max", clipped_surr_v.max().item(), grad_index)
-
+                    entropy_loss_v = ENTROPY_BETA * (-(torch.log(2*math.pi*torch.exp(net_act.logstd)) + 1)/2).mean()
                     loss_policy_v = -torch.min(surr_obj_v, clipped_surr_v).mean()
-                    loss_policy_v.backward()
+                    logg_policy = loss_policy_v + entropy_loss_v
+                    logg_policy.backward()
                     grad_max = 0.0
                     grad_means = 0.0
                     grad_count = 0
