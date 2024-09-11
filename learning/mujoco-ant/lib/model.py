@@ -84,9 +84,9 @@ class DDPGActor(nn.Module):
         super(DDPGActor, self).__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(obs_size, 400),
+            nn.Linear(obs_size, 512),
             nn.ReLU(),
-            nn.Linear(400, 300),
+            nn.Linear(512, 300),
             nn.ReLU(),
             nn.Linear(300, act_size),
             nn.Tanh()
@@ -109,7 +109,7 @@ class DDPGCritic(nn.Module):
 
         # 构建环境观察网络
         self.obs_net = nn.Sequential(
-            nn.Linear(obs_size, 400),
+            nn.Linear(obs_size, 512),
             nn.ReLU(),
         )
 
@@ -118,7 +118,7 @@ class DDPGCritic(nn.Module):
         # 这里的400是self.obs_net的输出维度，act_size是动作网络的输出维度
         # 为了后续合并预测评价做准备
         self.out_net = nn.Sequential(
-            nn.Linear(400 + act_size, 300),
+            nn.Linear(512 + act_size, 300),
             nn.ReLU(),
             nn.Linear(300, 1)
         )
