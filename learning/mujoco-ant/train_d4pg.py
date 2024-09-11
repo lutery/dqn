@@ -20,7 +20,7 @@ import torch.nn.functional as F
 ENV_ID = "Ant-v4"
 GAMMA = 0.99
 BATCH_SIZE = 64
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 2e-4
 REPLAY_SIZE = 100000
 REPLAY_INITIAL = 10000
 REWARD_STEPS = 5 # N步展开的步数大小
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     writer = SummaryWriter(comment="-d4pg_" + args.name)
     # 和p305不一样
     # 因为在分布式的版本中，可以使用基于OU过程的DDPG，也可以使用简单基于随机噪音的D4PG代理器
-    agent = model.AgentDDPG(act_net, device=device)
+    agent = model.AgentDDPG(act_net, device=device, ou_sigma=0.3, ou_teta=0.05)
     exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=GAMMA, steps_count=REWARD_STEPS)
     # 经验重放缓冲区
     buffer = ptan.experience.ExperienceReplayBuffer(exp_source, buffer_size=REPLAY_SIZE)
