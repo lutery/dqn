@@ -123,7 +123,7 @@ if __name__ == "__main__":
                 # 使用目标评测网络，根据下一个状态和下一个状态将要执行的动作得到下一个状态的评价Q值
                 q_last_v = tgt_crt_net.target_model(last_states_v, last_act_v)
                 # 如果是结束状态则将奖励置为0
-                q_last_v[dones_mask] = 0.0
+                q_last_v[dones_mask.bool()] = 0.0
                 # 计算Q值 bellman公式
                 q_ref_v = rewards_v.unsqueeze(dim=-1) + q_last_v * GAMMA
                 # 计算预测的当前Q值和Bellman计算的到的Q值之间的差异
