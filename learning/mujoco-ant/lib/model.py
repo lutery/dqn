@@ -40,7 +40,11 @@ class ModelA2C(nn.Module):
 
         # 只有这个是提取特征，其余的都是输出结果
         self.base = nn.Sequential(
-            nn.Linear(obs_size, HID_SIZE),
+            nn.Linear(obs_size, 400),
+            nn.ReLU(),
+            nn.Linear(400, 300),
+            nn.ReLU(),
+            nn.Linear(300, HID_SIZE),
             nn.ReLU(),
         )
         # 输出均值，表示最终要执行的动作内容
