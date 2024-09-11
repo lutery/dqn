@@ -37,7 +37,7 @@ def test_net(net, env, count=10, device="cpu"):
     rewards = 0.0
     steps = 0
     for _ in range(count):
-        obs = env.reset()
+        obs, _ = env.reset()
         while True:
             obs_v = ptan.agent.float32_preprocessor([obs]).to(device)
             # 根据环境预测动作
@@ -45,10 +45,10 @@ def test_net(net, env, count=10, device="cpu"):
             action = mu_v.squeeze(dim=0).data.cpu().numpy()
             action = np.clip(action, -1, 1)
             # 执行动作
-            obs, reward, done, _ = env.step(action)
+            obs, reward, done, trunc, _ = env.step(action)
             rewards += reward
             steps += 1
-            if done:
+            if done or trunc:
                 break
     return rewards / count, steps / count
 
