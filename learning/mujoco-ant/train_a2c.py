@@ -22,8 +22,8 @@ ENV_ID = "Ant-v4"
 GAMMA = 0.99 # Q值计算奖励衰减GAMMA系数
 REWARD_STEPS = 2 # 计算Q值观测展开的步数
 BATCH_SIZE = 128 # 训练batch 数据大小
-LEARNING_RATE = 5e-4 # 学习率
-ENTROPY_BETA = 1e-4 # 熵
+LEARNING_RATE = 1e-4 # 学习率
+ENTROPY_BETA = 1e-3 # 熵
 
 TEST_ITERS = 1000 # 用于判断多少轮测试一次，更新保存一次网络
 
