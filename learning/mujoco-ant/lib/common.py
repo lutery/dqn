@@ -25,7 +25,7 @@ def unpack_batch_a2c(batch, net, last_val_gamma, device="cpu"):
             not_done_idx.append(idx)
             last_states.append(exp.last_state)
     states_v = ptan.agent.float32_preprocessor(states).to(device)
-    actions_v = torch.FloatTensor(actions).to(device)
+    actions_v = torch.FloatTensor(np.array(actions)).to(device)
 
     # handle rewards
     rewards_np = np.array(rewards, dtype=np.float32)
