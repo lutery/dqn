@@ -67,3 +67,17 @@ def unpack_batch_ddqn(batch, device="cpu"):
     last_states_v = ptan.agent.float32_preprocessor(last_states).to(device)
     dones_t = torch.ByteTensor(dones).to(device)
     return states_v, actions_v, rewards_v, dones_t, last_states_v
+
+import os
+
+def save_checkpoints(iter, state, checkpoint_dir, save_name, keep_last=5):
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+
+    checkpoint_path = os.path.join(checkpoint_dir, f'{save_name}_epoch_{iter}.pth')
+    torch.save(state, checkpoint_path)
+
+    all_checkpoints = sorted(os.listdir(checkpoint_dir), key=lambda x: int(x.split('_')[1].split('.')[0]))
+    if len(all_checkpoints) > keep_last:
+        for old_checkpoint in all_checkpoints[:-keep_last]:
+            os.remove(os.path.join(checkpoint_dir, old_checkpoint))

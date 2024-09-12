@@ -121,13 +121,6 @@ if __name__ == "__main__":
     print(crt_net)
     tgt_act_net = ptan.agent.TargetNet(act_net)
     tgt_crt_net = ptan.agent.TargetNet(crt_net)
-    # 增加加载模型的代码
-    if (os.path.exists(os.path.join(save_path, "act_net.dat"))):
-        act_net.load_state_dict(torch.load(os.path.join(save_path, "act_net.dat")))
-        crt_net.load_state_dict(torch.load(os.path.join(save_path, "crt_net.dat")))
-        tgt_act_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "tgt_act_net.dat")))
-        tgt_crt_net.target_model.load_state_dict(torch.load(os.path.join(save_path, "tgt_crt_net.dat")))
-        print("加载模型成功")
 
     writer = SummaryWriter(comment="-d4pg_" + args.name)
     # 和p305不一样
@@ -138,8 +131,21 @@ if __name__ == "__main__":
     buffer = ptan.experience.ExperienceReplayBuffer(exp_source, buffer_size=REPLAY_SIZE)
     act_opt = optim.Adam(act_net.parameters(), lr=LEARNING_RATE)
     crt_opt = optim.Adam(crt_net.parameters(), lr=LEARNING_RATE)
-
     frame_idx = 0
+
+    if os.path.exists(save_path) and len(os.listdir(save_path)) > 0:
+        # 增加加载模型的代码
+        checkpoints = sorted(os.listdir(save_path), key=lambda x: int(x.split('_')[1].split('.')[0]))
+        checkpoint = torch.load(os.path.join(save_path, checkpoints[-1]), map_location=device)
+        frame_idx = checkpoint['frame_idx']
+        act_net.load_state_dict(checkpoint['act_net'])
+        crt_net.load_state_dict(checkpoint['crt_net'])
+        tgt_act_net.target_model.load_state_dict(checkpoint['tgt_act_net'])
+        tgt_crt_net.target_model.load_state_dict(checkpoint['tgt_crt_net'])
+        act_opt.load_state_dict(checkpoint['act_opt'])
+        crt_opt.load_state_dict(checkpoint['crt_opt'])
+        print("加载模型成功")
+
     best_reward = None
     with ptan.common.utils.RewardTracker(writer) as tracker:
         with ptan.common.utils.TBMeanTracker(writer, batch_size=10) as tb_tracker:
@@ -216,9 +222,15 @@ if __name__ == "__main__":
                             torch.save(act_net.state_dict(), fname)
                         best_reward = rewards
 
-                    torch.save(act_net.state_dict(), os.path.join(save_path, "act_net.dat"))
-                    torch.save(crt_net.state_dict(), os.path.join(save_path, "crt_net.dat"))
-                    torch.save(tgt_act_net.target_model.state_dict(), os.path.join(save_path, "tgt_act_net.dat"))
-                    torch.save(tgt_crt_net.target_model.state_dict(), os.path.join(save_path, "tgt_crt_net.dat"))
+                    checkpoint = {
+                        "act_net": act_net.state_dict(),
+                        "crt_net": crt_net.state_dict(),
+                        "tgt_act_net": tgt_act_net.target_model.state_dict(),
+                        "tgt_crt_net": tgt_crt_net.target_model.state_dict(),
+                        "act_opt": act_opt.state_dict(),
+                        "crt_opt": crt_opt.state_dict(),
+                        "frame_idx": frame_idx,
+                    }
+                    common.save_checkpoints(frame_idx, checkpoint, save_path, "d4pg", keep_last=10)
 
     pass
